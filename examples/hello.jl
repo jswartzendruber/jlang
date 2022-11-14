@@ -1,0 +1,3 @@
+main :: () {
+    printLine("Hello World!");
+}
