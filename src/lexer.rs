@@ -1,13 +1,22 @@
 #[derive(Debug)]
 enum TType {
-    IDENT,
-    SEMICOLON,
     COLONCOLON,
-    LPAREN,
+    COLONEQUAL,
+    SEMICOLON,
+    NUMBER,
     RPAREN,
     LCURLY,
     RCURLY,
+    LPAREN,
     STRING,
+    ARROW,
+    COLON,
+    COMMA,
+    IDENT,
+    SLASH,
+    MINUS,
+    STAR,
+    PLUS,
 }
 
 #[derive(Debug)]
@@ -22,8 +31,8 @@ impl Token {
 	Self { ttype, start_idx, end_idx }
     }
 
-    pub fn display(&self, file_contents: &str) {
-	println!("{:?}: {}", self.ttype, &file_contents[self.start_idx..self.end_idx]);
+    pub fn display(&self, file_contents: &str) -> String {
+	format!("{:?}: {}", self.ttype, &file_contents[self.start_idx..self.end_idx])
     }
 }
 
@@ -65,26 +74,61 @@ impl Lexer {
 	    } else if c == ';' {
 		lexer.tokens.push(Token::new(TType::SEMICOLON, lexer.curr_idx, lexer.curr_idx + 1));
 		lexer.curr_idx += 1
+	    } else if c == ',' {
+		lexer.tokens.push(Token::new(TType::COMMA, lexer.curr_idx, lexer.curr_idx + 1));
+		lexer.curr_idx += 1
+	    } else if c == '+' {
+		lexer.tokens.push(Token::new(TType::PLUS, lexer.curr_idx, lexer.curr_idx + 1));
+		lexer.curr_idx += 1
+	    } else if c == '*' {
+		lexer.tokens.push(Token::new(TType::STAR, lexer.curr_idx, lexer.curr_idx + 1));
+		lexer.curr_idx += 1
+	    } else if c == '/' {
+		if lexer.curr_idx + 1 < bytes.len() && bytes[lexer.curr_idx + 1] == b'/' {
+		    while lexer.curr_idx < bytes.len() && bytes[lexer.curr_idx] != b'\n' {
+			lexer.curr_idx += 1;
+		    }
+		} else {
+		    lexer.tokens.push(Token::new(TType::SLASH, lexer.curr_idx, lexer.curr_idx + 1));
+		    lexer.curr_idx += 1;
+		}
 	    } else if c == ':' {
 		if lexer.curr_idx + 1 < bytes.len() && bytes[lexer.curr_idx + 1] == b':' {
 		    lexer.tokens.push(Token::new(TType::COLONCOLON, lexer.curr_idx, lexer.curr_idx + 2));
 		    lexer.curr_idx += 2;
+		} else if lexer.curr_idx + 1 < bytes.len() && bytes[lexer.curr_idx + 1] == b'=' {
+		    lexer.tokens.push(Token::new(TType::COLONEQUAL, lexer.curr_idx, lexer.curr_idx + 2));
+		    lexer.curr_idx += 2;
 		} else {
-		    todo!();
+		    lexer.tokens.push(Token::new(TType::COLON, lexer.curr_idx, lexer.curr_idx + 1));
+		    lexer.curr_idx += 1;
 		}
+	    } else if c == '-' {
+		if lexer.curr_idx + 1 < bytes.len() && bytes[lexer.curr_idx + 1] == b'>' {
+		    lexer.tokens.push(Token::new(TType::ARROW, lexer.curr_idx, lexer.curr_idx + 2));
+		    lexer.curr_idx += 2;
+		} else {
+		    lexer.tokens.push(Token::new(TType::MINUS, lexer.curr_idx, lexer.curr_idx + 1));
+		    lexer.curr_idx += 1;
+		}
+	    } else if c.is_ascii_digit() {
+		let start = lexer.curr_idx;
+		while lexer.curr_idx < bytes.len() && (bytes[lexer.curr_idx] as char).is_ascii_digit() {
+		    lexer.curr_idx += 1;
+		}
+		lexer.tokens.push(Token::new(TType::NUMBER, start, lexer.curr_idx));
 	    } else if c.is_ascii_alphanumeric() {
 		let start = lexer.curr_idx;
-		while lexer.curr_idx + 1 < bytes.len() && (bytes[lexer.curr_idx] as char).is_ascii_alphanumeric() {
+		while lexer.curr_idx < bytes.len() && (bytes[lexer.curr_idx] as char).is_ascii_alphanumeric() {
 		    lexer.curr_idx += 1;
 		}
 		lexer.tokens.push(Token::new(TType::IDENT, start, lexer.curr_idx));
-		lexer.curr_idx += 1;
 	    } else if c == '"' {
 		let start = lexer.curr_idx;
 		while lexer.curr_idx + 1 < bytes.len() && bytes[lexer.curr_idx + 1] != b'"' {
 		    lexer.curr_idx += 1;
 		}
-		lexer.curr_idx += 2;
+		lexer.curr_idx += 2; // Skip quotes
 		lexer.tokens.push(Token::new(TType::STRING, start, lexer.curr_idx));
 	    } else {
 		println!("bad tok");
