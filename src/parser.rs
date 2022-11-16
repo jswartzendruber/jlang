@@ -8,29 +8,30 @@ enum Type {
 }
 
 #[derive(Debug)]
-enum Argument {
+pub enum Argument {
     I64(i64),
     String(String),
 }
 
 #[derive(Debug)]
-struct FunctionCall {
-    name: String,
-    args: Vec<Argument>,
+pub struct FunctionCall {
+    pub name: String,
+    pub args: Vec<Argument>,
+    pub stack_bytes_needed: usize,
 }
 
 impl FunctionCall {
-    fn new(name: String, args: Vec<Argument>) -> Self {
-	Self { name, args }
+    fn new(name: String, args: Vec<Argument>, stack_bytes_needed: usize) -> Self {
+	Self { name, args, stack_bytes_needed }
     }
 
     fn display(&self, ident: usize) {
-	println!("{:ident$}{}( {:?} )", "", self.name, self.args);
+	println!("{:ident$}{}( {:?} )  Stack: {}", "", self.name, self.args, self.stack_bytes_needed);
     }
 }
 
 #[derive(Debug)]
-enum Statement {
+pub enum Statement {
     FunctionCall(FunctionCall),
 }
 
@@ -43,10 +44,10 @@ impl Statement {
 }
 
 #[derive(Debug)]
-struct Function {
-    name: String,
+pub struct Function {
+    pub name: String,
     args: Vec<Argument>,
-    body: Vec<Statement>,
+    pub body: Vec<Statement>,
     return_type: Type,
 }
 
@@ -65,13 +66,13 @@ impl Function {
 }
 
 #[derive(Debug)]
-enum Node {
+pub enum Node {
     Function(Function),
 }
 
 #[derive(Debug)]
 pub struct AST {
-    node: Node,
+    pub node: Node,
     left: Box<Option<AST>>,
     right: Box<Option<AST>>,
 }
@@ -90,26 +91,30 @@ impl AST {
 
 pub struct Parser {
     file_contents: String,
-    pub ast: Option<AST>,
+    pub ast: AST,
 }
 
 impl Parser {
     fn new(file_contents: String) -> Self {
 	Self {
 	    file_contents,
-	    ast: None,
+
+	    // Immediately overwritten. Used to avoid Option<>
+	    ast: AST::new(
+		Node::Function(
+		    Function::new("a".to_string(), vec![], vec![], Type::Void)
+		), Box::new(None), Box::new(None),
+	    ),
 	}
     }
 
     pub fn parse(lexer: &mut Lexer) -> Self {
 	let mut parser = Self::new(lexer.file_contents.clone());
 
-	parser.ast = Some(
-	    AST::new(
-		parser.parse_function(&mut lexer.tokens),
-		Box::new(None),
-		Box::new(None)
-	    )
+	parser.ast = AST::new(
+	    parser.parse_function(&mut lexer.tokens),
+	    Box::new(None),
+	    Box::new(None)
 	);
 
 	parser
@@ -144,29 +149,44 @@ impl Parser {
 
     fn parse_function_call(&mut self, tokens: &mut Tokens) -> FunctionCall {
 	let func = tokens.advance().expect("Expected function name").copy_contents(&self.file_contents);
+	let mut stack_bytes_needed = 0;
 
 	tokens.expect(TType::LPAREN);
 
 	// Collect arguments, if any
 	let mut arguments = vec![];
 	while tokens.current().ttype != TType::RPAREN {
-	    arguments.push(self.parse_argument(tokens));
+	    let (arg, bytes) = self.parse_argument(tokens);
+	    arguments.push(arg);
+	    stack_bytes_needed += bytes;
 	}
 
 	tokens.expect(TType::RPAREN);
 	tokens.expect(TType::SEMICOLON);
 
-	FunctionCall::new(func, arguments)
+	FunctionCall::new(func, arguments, stack_bytes_needed)
     }
 
-    fn parse_argument(&mut self, tokens: &mut Tokens) -> Argument {
+    fn parse_argument(&mut self, tokens: &mut Tokens) -> (Argument, usize) {
 	let curr = tokens.advance().expect("Expected function argument");
-	match curr.ttype {
-	    TType::STRING => Argument::String(curr.copy_contents(&self.file_contents)),
+
+	let arg = match curr.ttype {
+	    TType::STRING => {
+		let arg = Argument::String(curr.copy_contents(&self.file_contents));
+		let bytes = 16; // char* = 8, length = 8
+		(arg, bytes)
+	    },
 	    _ => {
 		println!("Error: Unexpected argument: '{:?}'", curr);
 		std::process::exit(1);
 	    }
+	};
+
+	// Skip over comma if it exists, so we can collect other args
+	if tokens.current().ttype == TType::COMMA {
+	    tokens.expect(TType::COMMA);
 	}
+
+	arg
     }
 }

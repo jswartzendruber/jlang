@@ -1,6 +1,8 @@
+mod tac;
 mod lexer;
 mod parser;
 
+use tac::*;
 use lexer::*;
 use std::env;
 use parser::*;
@@ -26,6 +28,19 @@ fn main() {
 
     println!();
 
-    let parser = Parser::parse(&mut lexer);
-    parser.ast.as_ref().unwrap().print();
+    let mut parser = Parser::parse(&mut lexer);
+    parser.ast.print();
+
+    println!();
+
+    // typecheck here?
+
+    let tac = TAC::generate(&mut parser);
+    for line in &tac.large_literals {
+	println!("{:?}", line);
+    }
+    println!();
+    for line in &tac.code {
+	println!("{:?}", line);
+    }
 }
