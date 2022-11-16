@@ -1,0 +1,16 @@
+Function <- Identifier "::" "(" 0+ Paramters ")" "{" 1+ Statements "}"
+
+Identifier <- String
+
+Type <- Integer
+     |  StringLiteral
+
+Argument <- Type (the value of the type)
+
+StringLiteral <- '"' String '"'
+
+Parameter <- Identifier ":" Type
+
+Statement <- FunctionCall
+
+FunctionCall <- Identifier "(" 0+ Argument ")" ";"

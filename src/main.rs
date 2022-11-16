@@ -1,7 +1,9 @@
 mod lexer;
+mod parser;
 
 use lexer::*;
 use std::env;
+use parser::*;
 use std::process;
 use std::fs::File;
 use std::io::prelude::*;
@@ -16,9 +18,14 @@ fn main() {
     let mut contents = String::new();
     file.read_to_string(&mut contents).expect("Failed to read file");
 
-    let lexer = Lexer::lex(contents);
+    let mut lexer = Lexer::lex(contents);
 
-    for token in lexer.tokens {
+    for token in &lexer.tokens.tokens {
 	println!("{}", token.display(&lexer.file_contents));
     }
+
+    println!();
+
+    let parser = Parser::parse(&mut lexer);
+    parser.ast.as_ref().unwrap().print();
 }
