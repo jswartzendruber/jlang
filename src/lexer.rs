@@ -59,13 +59,13 @@ impl Tokens {
 	&self.tokens[self.curr_idx]
     }
 
-    // pub fn peek(&self) -> Option<&Token> {
-    // 	if self.is_at_end() {
-    // 	    return None;
-    // 	} else {
-    // 	    return Some(&self.tokens[self.curr_idx + 1]);
-    // 	}
-    // }
+    pub fn peek(&self) -> Option<&Token> {
+	if self.is_at_end() {
+	    return None;
+	} else {
+	    return Some(&self.tokens[self.curr_idx + 1]);
+	}
+    }
 
     // Returns current value, and then advances one token.
     pub fn advance(&mut self) -> Option<&Token> {

@@ -30,8 +30,8 @@ fn main() {
     // println!();
 
     let mut parser = Parser::parse(&mut lexer);
-    // parser.ast.print();
-    // println!();
+    parser.ast.print();
+    println!();
 
     // typecheck here?
 

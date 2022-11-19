@@ -9,8 +9,39 @@ enum Type {
 
 #[derive(Debug)]
 pub enum Argument {
-    I64(i64),
+    Expression(Expression),
     String(String),
+}
+
+#[derive(Debug)]
+pub enum Operation {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+#[derive(Debug)]
+pub enum ExpressionValue {
+    Operation(Operation),
+    I64(i64),
+}
+
+#[derive(Debug)]
+pub struct Expression {
+    value: ExpressionValue,
+    left: Box<Option<Expression>>,
+    right: Box<Option<Expression>>,
+}
+
+impl Expression {
+    fn new(value: ExpressionValue, left: Box<Option<Expression>>, right: Box<Option<Expression>>) -> Self {
+	Self { value, left, right }
+    }
+
+    fn new_leaf(value: ExpressionValue) -> Self {
+	Self { value, left: Box::new(None), right: Box::new(None) }
+    }
 }
 
 #[derive(Debug)]
@@ -26,7 +57,7 @@ impl FunctionCall {
     }
 
     fn display(&self, ident: usize) {
-	println!("{:ident$}{}( {:?} )  Stack: {}", "", self.name, self.args, self.stack_bytes_needed);
+	println!("{:ident$}{}( {:#?} )  Stack: {}", "", self.name, self.args, self.stack_bytes_needed);
     }
 }
 
@@ -168,16 +199,18 @@ impl Parser {
     }
 
     fn parse_argument(&mut self, tokens: &mut Tokens) -> (Argument, usize) {
-	let curr = tokens.advance().expect("Expected function argument");
+	let curr = tokens.current().clone();
 
 	let arg = match curr.ttype {
 	    TType::STRING => {
 		let arg = Argument::String(curr.copy_contents(&self.file_contents));
+		tokens.advance();
 		let bytes = 16; // char* = 8, length = 8
 		(arg, bytes)
 	    },
+	    TType::NUMBER => (Argument::Expression(self.parse_expression(tokens, 0)), 8),
 	    _ => {
-		println!("Error: Unexpected argument: '{:?}'", curr);
+		println!("Error: Unexpected argument: '{}'", curr.display(&self.file_contents));
 		std::process::exit(1);
 	    }
 	};
@@ -188,5 +221,53 @@ impl Parser {
 	}
 
 	arg
+    }
+
+    fn parse_expression(&mut self, tokens: &mut Tokens, min_bp: usize) -> Expression {
+	let lhs_token = tokens.advance().expect("Expected expr");
+	let mut lhs = match lhs_token.ttype {
+	    TType::NUMBER => {
+		let string_value = lhs_token.copy_contents(&self.file_contents);
+		Expression::new_leaf(ExpressionValue::I64(string_value.parse().unwrap()))
+	    },
+	    _ => {
+		println!("Error: Unexpected token in expression: '{}'", lhs_token.display(&self.file_contents));
+		std::process::exit(1);
+	    }
+	};
+
+	loop {
+	    let op_token = tokens.current();
+	    let op = match op_token.ttype {
+		TType::RPAREN => break,
+		TType::PLUS => Operation::Add,
+		TType::MINUS => Operation::Sub,
+		TType::STAR => Operation::Mul,
+		TType::SLASH => Operation::Div,
+		_ => {
+		    println!("Error: Expected operation, got : '{}'", op_token.display(&self.file_contents));
+		    std::process::exit(1);
+		}
+	    };
+
+	    let (lbp, rbp) = infix_binding_power(&op);
+	    if lbp < min_bp {
+		break;
+	    }
+
+	    tokens.advance();
+	    let rhs = self.parse_expression(tokens, rbp);
+
+	    lhs = Expression::new(ExpressionValue::Operation(op), Box::new(Some(lhs)), Box::new(Some(rhs)));
+	}
+
+	lhs
+    }
+}
+
+fn infix_binding_power(op: &Operation) -> (usize, usize) {
+    match op {
+	Operation::Add | Operation::Sub => (1, 2),
+	Operation::Mul | Operation::Div => (3, 4),
     }
 }
