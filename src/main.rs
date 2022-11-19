@@ -1,12 +1,15 @@
+mod asm;
 mod tac;
 mod lexer;
 mod parser;
 
+use asm::*;
 use tac::*;
 use lexer::*;
 use std::env;
 use parser::*;
 use std::process;
+use std::process::Command;
 use std::fs::File;
 use std::io::prelude::*;
 
@@ -35,7 +38,7 @@ fn main() {
 
     // typecheck here?
 
-    let tac = TAC::generate(&mut parser);
+    let mut tac = TAC::generate(&mut parser);
     for line in &tac.large_literals {
 	println!("{:?}", line);
     }
@@ -43,4 +46,49 @@ fn main() {
     for line in &tac.code {
 	println!("{:?}", line);
     }
+    println!();
+
+    let mut asm = ASM::generate(&mut tac);
+    for line in &asm.data_output {
+	println!("{}", line);
+    }
+    println!();
+    for line in &asm.text_output {
+	println!("{}", line);
+    }
+
+    let mut file = File::create("../out.asm").unwrap();
+    for line in &asm.data_output {
+	file.write(line.as_bytes());
+	file.write(b"\n");
+    }
+    for line in &asm.text_output {
+	file.write(line.as_bytes());
+	file.write(b"\n");
+    }
+
+    let compile_output = Command::new("as")
+        .arg("../out.asm")
+        .arg("-o")
+        .arg("../out.o")
+        .output()
+        .expect("Error assembling code.");
+    let lib_output = Command::new("as")
+        .arg("../io.asm")
+        .arg("-o")
+        .arg("../io.o")
+        .output()
+        .expect("Error assembling lib.");
+    let link_output = Command::new("ld")
+	.arg("-m")
+	.arg("elf_x86_64")
+	.arg("../out.o")
+	.arg("../io.o")
+	.arg("-o")
+	.arg("../a.out")
+	.output()
+	.expect("Error linking code");
+    let run_output = Command::new("./../a.out")
+	.output()
+	.expect("Error running code");
 }

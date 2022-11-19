@@ -1,7 +1,7 @@
 use crate::parser::*;
 
 #[derive(Debug)]
-struct VirtReg {
+pub struct VirtReg {
     id: usize,
 }
 
@@ -17,7 +17,7 @@ enum Immediate {
 }
 
 #[derive(Debug)]
-enum VirtRegArg {
+pub enum VirtRegArg {
     MemoryAddress(MemoryAddress),
     Immediate(Immediate),
 }
@@ -28,14 +28,15 @@ pub enum TACValue {
     BeginFunction { stack_bytes_needed: usize },
     EndFunction,
     Double { target: VirtReg, value: VirtRegArg },
-    Push { param_id: usize },
+    PushDefinedByte { param_id: usize, arg_num: usize },
+    PushIntLiteral { value: i64, arg_num: usize },
     Call { func_name: String },
     Pop { bytes_to_pop: usize },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TACLiteral {
-    String { id: usize, value: String }
+    String { id: usize, value: String },
 }
 
 pub struct TAC {
@@ -63,8 +64,6 @@ impl TAC {
 		}
 
 		// Handle return here
-
-
 	    },
 	};
 
@@ -76,10 +75,17 @@ impl TAC {
 	    Statement::FunctionCall(fc) => {
 		self.code.push(TACValue::BeginFunction { stack_bytes_needed: fc.stack_bytes_needed } );
 
+		let mut argc = 0;
 		for arg in &fc.args {
+		    argc += 1;
 		    match arg {
 			Argument::I64(i) => todo!(),
 			Argument::String(s) => {
+			    let newlines = s.matches("\\n").count();
+			    self.code.push(TACValue::PushIntLiteral { value: (s.len() - newlines) as i64, arg_num: argc } );
+			    self.curr_reg_id += 1;
+			    argc += 1;
+
 			    // db string
 			    self.large_literals.push(
 				TACLiteral::String {
@@ -87,7 +93,7 @@ impl TAC {
 				    value: s.to_string()
 				}
 			    );
-			    self.code.push(TACValue::Push { param_id: self.curr_reg_id } );
+			    self.code.push(TACValue::PushDefinedByte { param_id: self.curr_reg_id, arg_num: argc } );
 			    self.curr_reg_id += 1;
 			}
 		    }

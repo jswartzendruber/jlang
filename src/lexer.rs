@@ -169,9 +169,11 @@ impl Lexer {
 		    lexer.curr_idx += 1;
 		}
 		lexer.tokens.tokens.push(Token::new(TType::NUMBER, start, lexer.curr_idx));
-	    } else if c.is_ascii_alphanumeric() {
+	    } else if c.is_ascii_alphanumeric() || c == '_' {
 		let start = lexer.curr_idx;
-		while lexer.curr_idx < bytes.len() && (bytes[lexer.curr_idx] as char).is_ascii_alphanumeric() {
+		while lexer.curr_idx < bytes.len() && (
+		    (bytes[lexer.curr_idx] as char).is_ascii_alphanumeric() || bytes[lexer.curr_idx] == b'_')
+		{
 		    lexer.curr_idx += 1;
 		}
 		lexer.tokens.tokens.push(Token::new(TType::IDENT, start, lexer.curr_idx));
@@ -181,7 +183,7 @@ impl Lexer {
 		    lexer.curr_idx += 1;
 		}
 		lexer.curr_idx += 2; // Skip quotes
-		lexer.tokens.tokens.push(Token::new(TType::STRING, start, lexer.curr_idx));
+		lexer.tokens.tokens.push(Token::new(TType::STRING, start + 1, lexer.curr_idx - 1));
 	    } else {
 		println!("bad tok");
 		println!("{:?}", lexer.tokens);
