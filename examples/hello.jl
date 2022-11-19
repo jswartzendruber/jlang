@@ -1,3 +1,3 @@
 main :: () {
-    print_string("Hello World!\n\n");
+    print_string("Hello World!\n");
 }

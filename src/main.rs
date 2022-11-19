@@ -24,62 +24,59 @@ fn main() {
     file.read_to_string(&mut contents).expect("Failed to read file");
 
     let mut lexer = Lexer::lex(contents);
-
-    for token in &lexer.tokens.tokens {
-	println!("{}", token.display(&lexer.file_contents));
-    }
-
-    println!();
+    // for token in &lexer.tokens.tokens {
+    // 	println!("{}", token.display(&lexer.file_contents));
+    // }
+    // println!();
 
     let mut parser = Parser::parse(&mut lexer);
-    parser.ast.print();
-
-    println!();
+    // parser.ast.print();
+    // println!();
 
     // typecheck here?
 
     let mut tac = TAC::generate(&mut parser);
-    for line in &tac.large_literals {
-	println!("{:?}", line);
-    }
-    println!();
-    for line in &tac.code {
-	println!("{:?}", line);
-    }
-    println!();
+    // for line in &tac.large_literals {
+    // 	println!("{:?}", line);
+    // }
+    // println!();
+    // for line in &tac.code {
+    // 	println!("{:?}", line);
+    // }
+    // println!();
 
-    let mut asm = ASM::generate(&mut tac);
-    for line in &asm.data_output {
-	println!("{}", line);
-    }
-    println!();
-    for line in &asm.text_output {
-	println!("{}", line);
-    }
+    let asm = ASM::generate(&mut tac);
+    // for line in &asm.data_output {
+    // 	println!("{}", line);
+    // }
+    // println!();
+    // for line in &asm.text_output {
+    // 	println!("{}", line);
+    // }
 
     let mut file = File::create("../out.asm").unwrap();
     for line in &asm.data_output {
-	file.write(line.as_bytes());
-	file.write(b"\n");
+	file.write(line.as_bytes()).expect("Failed to write assembly to file");
+	file.write(b"\n").expect("Failed to write assembly to file");
     }
     for line in &asm.text_output {
-	file.write(line.as_bytes());
-	file.write(b"\n");
+	file.write(line.as_bytes()).expect("Failed to write assembly to file");
+	file.write(b"\n").expect("Failed to write assembly to file");
     }
 
-    let compile_output = Command::new("as")
+    Command::new("as")
         .arg("../out.asm")
         .arg("-o")
         .arg("../out.o")
         .output()
         .expect("Error assembling code.");
-    let lib_output = Command::new("as")
+    Command::new("as")
         .arg("../io.asm")
         .arg("-o")
         .arg("../io.o")
         .output()
         .expect("Error assembling lib.");
-    let link_output = Command::new("ld")
+    Command::new("ld")
 	.arg("-m")
 	.arg("elf_x86_64")
 	.arg("../out.o")
@@ -88,7 +85,4 @@ fn main() {
 	.arg("../a.out")
 	.output()
 	.expect("Error linking code");
-    let run_output = Command::new("./../a.out")
-	.output()
-	.expect("Error running code");
 }

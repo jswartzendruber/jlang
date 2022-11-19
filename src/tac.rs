@@ -6,13 +6,13 @@ pub struct VirtReg {
 }
 
 #[derive(Debug)]
-enum MemoryAddress {
+pub enum MemoryAddress {
     VirtReg(VirtReg),
     DefinedByte { id: usize },
 }
 
 #[derive(Debug)]
-enum Immediate {
+pub enum Immediate {
     I64(i64),
 }
 
@@ -79,7 +79,7 @@ impl TAC {
 		for arg in &fc.args {
 		    argc += 1;
 		    match arg {
-			Argument::I64(i) => todo!(),
+			Argument::I64(_) => todo!(),
 			Argument::String(s) => {
 			    let newlines = s.matches("\\n").count();
 			    self.code.push(TACValue::PushIntLiteral { value: (s.len() - newlines) as i64, arg_num: argc } );

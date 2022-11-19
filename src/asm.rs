@@ -38,7 +38,7 @@ impl ASM {
 		},
 		TACValue::BeginFunction { stack_bytes_needed } => asm.text_output.push(format!("sub ${}, %rsp", stack_bytes_needed)),
 		TACValue::EndFunction => asm.text_output.push("pop %rbp".to_string()),
-		TACValue::Double { target, value } => todo!(),
+		TACValue::Double { .. } => todo!(),
 		TACValue::PushDefinedByte { param_id, arg_num } => {
 		    asm.text_output.push(format!("lea ._t{}(%rip), %r10", param_id));
 		    asm.text_output.push(format!("movq %r10, -{}(%rsp)", arg_num * 8));
