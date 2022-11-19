@@ -21,6 +21,18 @@ pub enum Operation {
     Div,
 }
 
+impl Operation {
+    fn from(ttype: &TType) -> Self {
+	match ttype {
+	    TType::PLUS => Operation::Add,
+	    TType::MINUS => Operation::Sub,
+	    TType::STAR => Operation::Mul,
+	    TType::SLASH => Operation::Div,
+	    _ => unreachable!(),
+	}
+    }
+}
+
 #[derive(Debug)]
 pub enum ExpressionValue {
     Operation(Operation),
@@ -230,6 +242,11 @@ impl Parser {
 		let string_value = lhs_token.copy_contents(&self.file_contents);
 		Expression::new_leaf(ExpressionValue::I64(string_value.parse().unwrap()))
 	    },
+	    TType::LPAREN => {
+		let lhs = self.parse_expression(tokens, 0);
+		tokens.expect(TType::RPAREN);
+		lhs
+	    },
 	    _ => {
 		println!("Error: Unexpected token in expression: '{}'", lhs_token.display(&self.file_contents));
 		std::process::exit(1);
@@ -239,35 +256,36 @@ impl Parser {
 	loop {
 	    let op_token = tokens.current();
 	    let op = match op_token.ttype {
+		TType::PLUS | TType::MINUS | TType::STAR | TType::SLASH => op_token.ttype.clone(),
 		TType::RPAREN => break,
-		TType::PLUS => Operation::Add,
-		TType::MINUS => Operation::Sub,
-		TType::STAR => Operation::Mul,
-		TType::SLASH => Operation::Div,
 		_ => {
 		    println!("Error: Expected operation, got : '{}'", op_token.display(&self.file_contents));
 		    std::process::exit(1);
 		}
 	    };
 
-	    let (lbp, rbp) = infix_binding_power(&op);
-	    if lbp < min_bp {
-		break;
+	    if let Some((lbp, rbp)) = infix_binding_power(&op) {
+		if lbp < min_bp {
+		    break;
+		}
+
+		tokens.advance();
+		let rhs = self.parse_expression(tokens, rbp);
+
+		lhs = Expression::new(ExpressionValue::Operation(Operation::from(&op)), Box::new(Some(lhs)), Box::new(Some(rhs)));
+		continue;
 	    }
-
-	    tokens.advance();
-	    let rhs = self.parse_expression(tokens, rbp);
-
-	    lhs = Expression::new(ExpressionValue::Operation(op), Box::new(Some(lhs)), Box::new(Some(rhs)));
 	}
 
 	lhs
     }
 }
 
-fn infix_binding_power(op: &Operation) -> (usize, usize) {
-    match op {
-	Operation::Add | Operation::Sub => (1, 2),
-	Operation::Mul | Operation::Div => (3, 4),
-    }
+fn infix_binding_power(op: &TType) -> Option<(usize, usize)> {
+    let res = match op {
+	TType::PLUS | TType::MINUS => (1, 2),
+	TType::STAR | TType::SLASH => (3, 4),
+	_ => return None,
+    };
+    Some(res)
 }
