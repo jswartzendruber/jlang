@@ -1,10 +1,34 @@
 use crate::tac::*;
+use crate::parser::*;
 use std::collections::HashMap;
+
+struct RSP {
+    offset: usize,
+    func_begin: usize,
+}
+
+impl RSP {
+    fn new() -> Self { Self { offset: 0, func_begin: 0 } }
+    fn push(&mut self, size: usize) -> usize {
+	self.offset += size;
+	self.offset
+    }
+    fn pop(&mut self, size: usize) -> usize {
+	self.offset -= size;
+	self.offset
+    }
+    fn begin(&mut self, func_begin: usize) { self.func_begin = func_begin }
+    fn end(&mut self) {
+	self.pop(self.func_begin);
+	self.func_begin = 0;
+    }
+}
 
 pub struct ASM {
     pub data_output: Vec<String>,
     pub text_output: Vec<String>,
-    vars: HashMap<usize, TACLiteral>,
+    var_table: HashMap<VirtReg, usize>,
+    rsp: RSP,
 }
 
 impl ASM {
@@ -12,17 +36,18 @@ impl ASM {
 	let mut asm = Self {
 	    data_output: vec![],
 	    text_output: vec![],
-	    vars: HashMap::new()
+	    var_table: HashMap::new(),
+	    rsp: RSP::new(),
 	};
 
 	asm.text_output.push(".global _start".to_string());
 
 	for literal in &tac.large_literals {
-	    match literal { // Need to convert newline to ascii?
-		TACLiteral::String { id, value } => {
-		    asm.data_output.push(format!("._t{}:", id));
+	    match literal {
+		TACLiteral::String { virt_reg, value } => {
+		    asm.data_output.push(format!("._t{}:", virt_reg.id));
 		    asm.data_output.push(format!(".ascii \"{}\"", value));
-		    asm.vars.insert(*id, literal.clone());
+		    // asm.var_table.insert(*virt_reg, literal.clone());
 		},
 	    };
 	}
@@ -36,24 +61,66 @@ impl ASM {
 			asm.text_output.push(format!("_{}:", name));
 		    }
 		},
-		TACValue::BeginFunction { stack_bytes_needed } => asm.text_output.push(format!("sub ${}, %rsp", stack_bytes_needed)),
-		TACValue::EndFunction => asm.text_output.push("pop %rbp".to_string()),
-		TACValue::Double { .. } => todo!(),
-		TACValue::Quad { .. } => todo!(),
-		TACValue::PushDefinedByte { param_id, arg_num } => {
-		    asm.text_output.push(format!("lea ._t{}(%rip), %r10", param_id));
-		    asm.text_output.push(format!("movq %r10, -{}(%rsp)", arg_num * 8));
+		TACValue::BeginFunction { stack_bytes_needed } => {
+		    asm.text_output.push(format!("sub ${}, %rsp", stack_bytes_needed));
+		    asm.rsp.begin(*stack_bytes_needed);
+		},
+		TACValue::EndFunction => {
+		    asm.text_output.push(format!("add ${}, %rsp", asm.rsp.func_begin));
+		    asm.rsp.end();
+		},
+		TACValue::Double { target, .. } => {
+		    let offset = asm.rsp.push(8);
+		    asm.var_table.insert(*target, offset);
+		    asm.text_output.push(format!(
+			"movq ${}, -{}(%rsp)",
+			tac.var_locations.get(&target).unwrap(),
+			offset
+		    ));
+		},
+		TACValue::Quad { target, v1, op, v2 } => {
+		    let offset = asm.rsp.push(8);
+		    match op {
+			Operation::Add => {
+			    asm.text_output.push(
+				format!("mov -{}(%rsp), %rax", asm.var_table.get(&v1).unwrap())
+			    );
+			    asm.text_output.push(
+				format!("add -{}(%rsp), %rbx", asm.var_table.get(&v2).unwrap())
+			    );
+			    asm.text_output.push(format!("add %rbx, %rax"));
+			    asm.text_output.push(format!("mov %rax, -{}(%rsp)", offset));
+			},
+			Operation::Sub => todo!(),
+			Operation::Mul => todo!(),
+			Operation::Div => todo!(),
+		    };
+		    asm.var_table.insert(*target, offset);
+		},
+		TACValue::PushVirtReg { virt_reg, arg_num } => {
+		    let offset = asm.var_table.get(&virt_reg).unwrap();
 		    match arg_num {
-			1 => asm.text_output.push(format!("mov -{}(%rsp), %rdi", arg_num * 8)),
-			2 => asm.text_output.push(format!("mov -{}(%rsp), %rsi", arg_num * 8)),
+			1 => asm.text_output.push(format!("mov -{}(%rsp), %rdi", offset)),
+			2 => asm.text_output.push(format!("mov -{}(%rsp), %rsi", offset)),
+			_ => todo!(),
+		    }
+		},
+		TACValue::PushDefinedByte { virt_reg, arg_num } => {
+		    let offset = asm.rsp.push(8);
+		    asm.text_output.push(format!("lea ._t{}(%rip), %r10", virt_reg.id));
+		    asm.text_output.push(format!("movq %r10, -{}(%rsp)", offset));
+		    match arg_num {
+			1 => asm.text_output.push(format!("mov -{}(%rsp), %rdi", offset)),
+			2 => asm.text_output.push(format!("mov -{}(%rsp), %rsi", offset)),
 			_ => todo!(),
 		    }
 		},
 		TACValue::PushIntLiteral { value, arg_num } => {
-		    asm.text_output.push(format!("movq ${}, -{}(%rsp)", value, arg_num * 8));
+		    let offset = asm.rsp.push(8);
+		    asm.text_output.push(format!("movq ${}, -{}(%rsp)", value, offset));
 		    match arg_num {
-			1 => asm.text_output.push(format!("mov -{}(%rsp), %rdi", arg_num * 8)),
-			2 => asm.text_output.push(format!("mov -{}(%rsp), %rsi", arg_num * 8)),
+			1 => asm.text_output.push(format!("mov -{}(%rsp), %rdi", offset)),
+			2 => asm.text_output.push(format!("mov -{}(%rsp), %rsi", offset)),
 			_ => todo!(),
 		    }
 		},
@@ -61,13 +128,13 @@ impl ASM {
 		    if func_name == "print_string" {
 			asm.text_output.push(".extern _la_print_string".to_string());
 			asm.text_output.push("call _la_print_string".to_string());
-		    } else {
+		    } else if func_name == "print_int" {
+			asm.text_output.push(".extern _la_print_u64".to_string());
+			asm.text_output.push("call _la_print_u64".to_string());
+		    } else  {
 			asm.text_output.push(format!("call _{}", func_name));
 		    }
 		},
-		TACValue::Pop { bytes_to_pop } => {
-		    asm.text_output.push(format!("add ${}, %rsp", bytes_to_pop));
-		}
 	    }
 	}
 

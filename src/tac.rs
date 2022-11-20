@@ -1,26 +1,49 @@
+use std::fmt;
 use crate::parser::*;
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
 pub struct VirtReg {
-    id: usize,
+    pub id: usize,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub enum MemoryAddress {
     VirtReg(VirtReg),
-    DefinedByte { id: usize },
+    DefinedByte { virt_reg: VirtReg },
 }
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
 pub enum Immediate {
     I64(i64),
+}
+
+impl fmt::Display for Immediate {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	match self {
+	    Immediate::I64(i) => write!(f, "{}", i),
+	}
+    }
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub enum VirtRegArg {
     MemoryAddress(MemoryAddress),
     Immediate(Immediate),
+}
+
+impl fmt::Display for VirtRegArg {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	match self {
+	    VirtRegArg::Immediate(i) => write!(f, "{}", i),
+	    VirtRegArg::MemoryAddress(m) => {
+		match m {
+		    MemoryAddress::VirtReg(v) => write!(f, "{}", v.id),
+		    MemoryAddress::DefinedByte { virt_reg } => write!(f, "{}", virt_reg.id),
+		}
+	    }
+	}
+    }
 }
 
 #[derive(Debug)]
@@ -30,22 +53,22 @@ pub enum TACValue {
     EndFunction,
     Double { target: VirtReg, value: VirtRegArg },
     Quad { target: VirtReg, v1: VirtReg, op: Operation, v2: VirtReg },
-    PushDefinedByte { param_id: usize, arg_num: usize },
+    PushDefinedByte { virt_reg: VirtReg, arg_num: usize },
     PushIntLiteral { value: i64, arg_num: usize },
+    PushVirtReg { virt_reg: VirtReg, arg_num: usize },
     Call { func_name: String },
-    Pop { bytes_to_pop: usize },
 }
 
 #[derive(Debug, Clone)]
 pub enum TACLiteral {
-    String { id: usize, value: String },
+    String { virt_reg: VirtReg, value: String },
 }
 
 pub struct TAC {
     pub code: Vec<TACValue>,
     pub large_literals: Vec<TACLiteral>,
     curr_reg_id: usize,
-    var_locations: HashMap<Immediate, VirtReg>
+    pub var_locations: HashMap<VirtReg, VirtRegArg>
 }
 
 impl TAC {
@@ -84,38 +107,40 @@ impl TAC {
 		    match arg {
 			Argument::Expression(e) => {
 			    let mut tac_list = vec![];
-			    self.generate_expression(&mut tac_list, e);
+			    let expr_reg = self.generate_expression(&mut tac_list, e);
 			    for line in tac_list {
 				self.code.push(line);
 			    }
+			    self.code.push(TACValue::PushVirtReg {
+				virt_reg: expr_reg,
+				arg_num: argc
+			    });
 			},
 			Argument::String(s) => {
-			    let newlines = s.matches("\\n").count(); // just have \\ ?
+			    let newlines = s.matches("\\").count(); // may not always work
 			    self.code.push(TACValue::PushIntLiteral {
 				value: (s.len() - newlines) as i64,
 				arg_num: argc
 			    });
-			    self.curr_reg_id += 1;
+			    let virt_reg = self.new_virt_reg();
 			    argc += 1;
 
 			    // db string
 			    self.large_literals.push(
 				TACLiteral::String {
-				    id: self.curr_reg_id,
+				    virt_reg,
 				    value: s.to_string()
 				}
 			    );
 			    self.code.push(TACValue::PushDefinedByte {
-				param_id: self.curr_reg_id,
+				virt_reg: virt_reg,
 				arg_num: argc
 			    });
-			    self.curr_reg_id += 1;
 			}
 		    }
 		}
 
 		self.code.push(TACValue::Call { func_name: fc.name.clone() } );
-		self.code.push(TACValue::Pop { bytes_to_pop: fc.stack_bytes_needed } );
 		self.code.push(TACValue::EndFunction);
 	    }
 	}
@@ -144,6 +169,10 @@ impl TAC {
 	match &expr.value {
 	    ExpressionValue::I64(_) => unreachable!(),
 	    ExpressionValue::Operation(o) => {
+		self.var_locations.insert(
+		    virt_reg,
+		    VirtRegArg::MemoryAddress(MemoryAddress::VirtReg(virt_reg))
+		);
 		tac_list.push(TACValue::Quad { target: virt_reg.clone(), v1: t1, op: o.clone(), v2: t2 } );
 	    }
 	}
@@ -153,6 +182,7 @@ impl TAC {
 
     fn generate_immediate(&mut self, tac_list: &mut Vec<TACValue>, val: Immediate) -> VirtReg {
 	let virt_reg = self.new_virt_reg();
+	self.var_locations.insert(virt_reg, VirtRegArg::Immediate(val));
 
 	match val {
 	    Immediate::I64(_) => {

@@ -1,3 +1,4 @@
+use std::fmt;
 use crate::lexer::*;
 
 #[derive(Debug)]
@@ -55,17 +56,14 @@ impl Expression {
 	Self { value, left: None, right: None }
     }
 
-    fn count_value_nodes(expr: &Expression) -> usize {
-	let mut total = match &expr.value {
-	    ExpressionValue::Operation(_) => 0,
-	    ExpressionValue::I64(_) => 1,
-	};
+    fn count_nodes(expr: &Expression) -> usize {
+	let mut total = 1;
 
 	if let Some(left) = &expr.left {
-	    total += Self::count_value_nodes(&left);
+	    total += Self::count_nodes(&left);
 	}
 	if let Some(right) = &expr.right {
-	    total += Self::count_value_nodes(&right);
+	    total += Self::count_nodes(&right);
 	}
 
 	total
@@ -83,9 +81,11 @@ impl FunctionCall {
     fn new(name: String, args: Vec<Argument>, stack_bytes_needed: usize) -> Self {
 	Self { name, args, stack_bytes_needed }
     }
+}
 
-    fn display(&self, ident: usize) {
-	println!("{:ident$}{}( {:#?} )  Stack: {}", "", self.name, self.args, self.stack_bytes_needed);
+impl fmt::Display for FunctionCall {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	write!(f, "{}( {:#?} ) Stack: {}", self.name, self.args, self.stack_bytes_needed)
     }
 }
 
@@ -94,10 +94,10 @@ pub enum Statement {
     FunctionCall(FunctionCall),
 }
 
-impl Statement {
-    fn display(&self, indent: usize) {
+impl fmt::Display for Statement {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 	match self {
-	    Statement::FunctionCall(fc) => fc.display(indent),
+	    Statement::FunctionCall(fc) => write!(f, "{}", fc),
 	}
     }
 }
@@ -114,13 +114,15 @@ impl Function {
     fn new(name: String, args: Vec<Argument>, body:Vec<Statement>, return_type: Type) -> Self {
 	Self { name, args, body, return_type }
     }
+}
 
-    fn display(&self, indent: usize) {
-	println!("{}( {:?} ) -> {:?}\n{{", self.name, self.args, self.return_type);
+impl fmt::Display for Function {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	write!(f, "{}( {:?} ) -> {:?}\n{{\n", self.name, self.args, self.return_type)?;
 	for statement in &self.body {
-	    statement.display(indent);
+	    write!(f, "{}", statement)?;
 	}
-	println!("}}");
+	write!(f, "}}")
     }
 }
 
@@ -140,10 +142,12 @@ impl AST {
     fn new(node: Node, left: Box<Option<AST>>, right: Box<Option<AST>>) -> Self {
 	Self { node, left, right }
     }
+}
 
-    pub fn print(&self) {
+impl fmt::Display for AST {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 	match &self.node {
-	    Node::Function(f) => f.display(2),
+	    Node::Function(func) => write!(f, "{}", func),
 	}
     }
 }
@@ -238,7 +242,7 @@ impl Parser {
 	    },
 	    TType::NUMBER | TType::LPAREN => {
 		let expr = self.parse_expression(tokens, 0);
-		let count = Expression::count_value_nodes(&expr) * 8;
+		let count = Expression::count_nodes(&expr) * 8;
 		(Argument::Expression(expr), count)
 	    },
 	    _ => {

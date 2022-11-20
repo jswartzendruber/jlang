@@ -1,6 +1,6 @@
 	.global _la_print_string
 	.global _la_print_char
-	.global _la_print_i64
+	.global _la_print_u64
 
 # rdi - int length
 # rsi - char* message
@@ -25,7 +25,7 @@ _la_print_u64_1:
 	inc %r10
 
 	cmp $0, %rax
-	jg _la_print_i64_1 # push chars on stack until i is 0
+	jg _la_print_u64_1 # push chars on stack until i is 0
 _la_print_u64_2:
 	pop %rdi
 	add $0x30, %rdi # convert to char
@@ -33,7 +33,7 @@ _la_print_u64_2:
 	dec %r10
 
 	cmp $0, %r10
-	jg _la_print_i64_2 # print all chars on stack
+	jg _la_print_u64_2 # print all chars on stack
 	ret
 
 # rdi - char c

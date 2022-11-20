@@ -30,20 +30,19 @@ fn main() {
     // println!();
 
     let mut parser = Parser::parse(&mut lexer);
-    // parser.ast.print();
-    // println!();
+    // println!("{}", parser.ast);
 
     // typecheck here?
 
     let mut tac = TAC::generate(&mut parser);
-    for line in &tac.large_literals {
-	println!("{:?}", line);
-    }
-    println!();
-    for line in &tac.code {
-	println!("{:?}", line);
-    }
-    println!();
+    // for line in &tac.large_literals {
+    // 	println!("{:?}", line);
+    // }
+    // println!();
+    // for line in &tac.code {
+    // 	println!("{:?}", line);
+    // }
+    // println!();
 
     let asm = ASM::generate(&mut tac);
     // for line in &asm.data_output {
@@ -85,4 +84,12 @@ fn main() {
 	.arg("../a.out")
 	.output()
 	.expect("Error linking code");
+    let result = Command::new("./../a.out")
+	.output()
+	.expect("Error running code");
+    println!();
+    println!("Program results:");
+    println!("-=------------=-");
+    print!("{}", String::from_utf8(result.stdout).unwrap());
+    println!("-=------------=-");
 }
