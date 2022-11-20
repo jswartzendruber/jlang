@@ -213,6 +213,7 @@ impl TAC {
                 });
                 self.code.push(TACValue::EndFunction);
             }
+            Statement::If(i) => todo!(),
         }
     }
 

@@ -2,7 +2,9 @@
 pub enum TType {
     COLONCOLON,
     COLONEQUAL,
+    EQUALEQUAL,
     SEMICOLON,
+    PIPEPIPE,
     NUMBER,
     RPAREN,
     LCURLY,
@@ -68,6 +70,14 @@ impl Tokens {
 
     pub fn current(&self) -> &Token {
         &self.tokens[self.curr_idx]
+    }
+
+    pub fn peek(&self) -> Option<&Token> {
+        if self.curr_idx + 1 < self.tokens.len() {
+            return Some(&self.tokens[self.curr_idx + 1]);
+        } else {
+            return None;
+        }
     }
 
     // Returns current value, and then advances one token.
@@ -191,6 +201,28 @@ impl Lexer {
                         lexer.curr_idx + 1,
                     ));
                     lexer.curr_idx += 1;
+                }
+            } else if c == '=' {
+                if lexer.curr_idx + 1 < bytes.len() && bytes[lexer.curr_idx + 1] == b'=' {
+                    lexer.tokens.tokens.push(Token::new(
+                        TType::EQUALEQUAL,
+                        lexer.curr_idx,
+                        lexer.curr_idx + 2,
+                    ));
+                    lexer.curr_idx += 2;
+                } else {
+                    todo!();
+                }
+            } else if c == '|' {
+                if lexer.curr_idx + 1 < bytes.len() && bytes[lexer.curr_idx + 1] == b'|' {
+                    lexer.tokens.tokens.push(Token::new(
+                        TType::PIPEPIPE,
+                        lexer.curr_idx,
+                        lexer.curr_idx + 2,
+                    ));
+                    lexer.curr_idx += 2;
+                } else {
+                    todo!();
                 }
             } else if c == ':' {
                 if lexer.curr_idx + 1 < bytes.len() && bytes[lexer.curr_idx + 1] == b':' {

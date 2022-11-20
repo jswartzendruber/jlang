@@ -79,6 +79,7 @@ impl ASM {
                     asm.rsp.end();
                 }
                 TACValue::Double { target, .. } => {
+                    // TODO: Support immediates that are larger than 32 bits
                     let offset = asm.rsp.push(8);
                     asm.var_table.insert(*target, offset);
                     asm.text_output.push(format!(
@@ -105,6 +106,7 @@ impl ASM {
                         Operation::Sub => todo!(),
                         Operation::Mul => todo!(),
                         Operation::Div => todo!(),
+                        Operation::EqEq => todo!(),
                     };
                     asm.var_table.insert(*target, offset);
                 }
@@ -143,8 +145,8 @@ impl ASM {
                         asm.text_output.push(".extern _la_print_string".to_string());
                         asm.text_output.push("call _la_print_string".to_string());
                     } else if func_name == "print_int" {
-                        asm.text_output.push(".extern _la_print_u64".to_string());
-                        asm.text_output.push("call _la_print_u64".to_string());
+                        asm.text_output.push(".extern _la_print_i64".to_string());
+                        asm.text_output.push("call _la_print_i64".to_string());
                     } else {
                         asm.text_output.push(format!("call _{}", func_name));
                     }

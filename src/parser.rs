@@ -1,11 +1,20 @@
 use crate::lexer::*;
 use std::fmt;
 
-#[derive(Debug)]
 enum Type {
     I64,
     Void,
     String,
+}
+
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Type::I64 => write!(f, "i64"),
+            Type::Void => write!(f, "Void"),
+            Type::String => write!(f, "String"),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -20,6 +29,7 @@ pub enum Operation {
     Sub,
     Mul,
     Div,
+    EqEq,
 }
 
 impl fmt::Display for Operation {
@@ -29,6 +39,7 @@ impl fmt::Display for Operation {
             Operation::Sub => write!(f, "-"),
             Operation::Mul => write!(f, "*"),
             Operation::Div => write!(f, "/"),
+            Operation::EqEq => write!(f, "=="),
         }
     }
 }
@@ -40,6 +51,7 @@ impl Operation {
             TType::MINUS => Operation::Sub,
             TType::STAR => Operation::Mul,
             TType::SLASH => Operation::Div,
+            TType::EQUALEQUAL => Operation::EqEq,
             _ => unreachable!(),
         }
     }
@@ -117,19 +129,51 @@ impl fmt::Display for FunctionCall {
 }
 
 #[derive(Debug)]
+pub struct If {
+    condition: Expression,
+    if_true: Vec<Statement>,
+    if_false: Option<Vec<Statement>>,
+}
+
+impl If {
+    fn new(
+        condition: Expression,
+        if_true: Vec<Statement>,
+        if_false: Option<Vec<Statement>>,
+    ) -> Self {
+        Self {
+            condition,
+            if_true,
+            if_false,
+        }
+    }
+}
+
+impl fmt::Display for If {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "If ( {:?} ) {{\n  {:?}\n}}\nelse {{\n  {:?}\n}}\n",
+            self.condition, self.if_true, self.if_false
+        )
+    }
+}
+
+#[derive(Debug)]
 pub enum Statement {
     FunctionCall(FunctionCall),
+    If(If),
 }
 
 impl fmt::Display for Statement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Statement::FunctionCall(fc) => write!(f, "{}", fc),
+            Statement::If(i) => write!(f, "{}", i),
         }
     }
 }
 
-#[derive(Debug)]
 pub struct Function {
     pub name: String,
     args: Vec<Argument>,
@@ -152,7 +196,7 @@ impl fmt::Display for Function {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{}( {:?} ) -> {:?}\n{{\n",
+            "{}( {:?} ) -> {}\n{{\n",
             self.name, self.args, self.return_type
         )?;
         for statement in &self.body {
@@ -162,12 +206,10 @@ impl fmt::Display for Function {
     }
 }
 
-#[derive(Debug)]
 pub enum Node {
     Function(Function),
 }
 
-#[derive(Debug)]
 pub struct AST {
     pub node: Node,
     left: Box<Option<AST>>,
@@ -245,8 +287,47 @@ impl Parser {
     }
 
     fn parse_statement(&mut self, tokens: &mut Tokens) -> Statement {
-        // Assume function call
-        Statement::FunctionCall(self.parse_function_call(tokens))
+        match tokens.peek().expect("Expected statement").ttype {
+            TType::LPAREN => Statement::FunctionCall(self.parse_function_call(tokens)),
+            _ => Statement::If(self.parse_if_statement(tokens)),
+        }
+    }
+
+    fn parse_if_statement(&mut self, tokens: &mut Tokens) -> If {
+        let mut curr_token = tokens.current();
+        if curr_token.copy_contents(&self.file_contents) == "if" {
+            tokens.expect(TType::IDENT);
+        } else {
+            println!(
+                "Error: Unexpected identifier in if statement: '{}'",
+                curr_token.display(&self.file_contents)
+            );
+            std::process::exit(1);
+        }
+
+        let condition = self.parse_expression(tokens, 0);
+        tokens.expect(TType::LCURLY);
+
+        // TODO: Handle arbitrary number of statements
+        let mut if_true = vec![];
+        if_true.push(self.parse_statement(tokens));
+        tokens.expect(TType::RCURLY);
+
+        curr_token = tokens.current();
+        let if_false = if curr_token.copy_contents(&self.file_contents) == "else" {
+            tokens.expect(TType::IDENT);
+            let mut v = vec![];
+
+            tokens.expect(TType::LCURLY);
+            v.push(self.parse_statement(tokens));
+            tokens.expect(TType::RCURLY);
+
+            Some(v)
+        } else {
+            None
+        };
+
+        If::new(condition, if_true, if_false)
     }
 
     fn parse_function_call(&mut self, tokens: &mut Tokens) -> FunctionCall {
@@ -328,15 +409,10 @@ impl Parser {
         loop {
             let op_token = tokens.current();
             let op = match op_token.ttype {
-                TType::PLUS | TType::MINUS | TType::STAR | TType::SLASH => op_token.ttype.clone(),
-                TType::RPAREN => break,
-                _ => {
-                    println!(
-                        "Error: Expected operation, got : '{}'",
-                        op_token.display(&self.file_contents)
-                    );
-                    std::process::exit(1);
+                TType::PLUS | TType::MINUS | TType::STAR | TType::SLASH | TType::EQUALEQUAL => {
+                    op_token.ttype.clone()
                 }
+                _ => break,
             };
 
             if let Some((lbp, rbp)) = infix_binding_power(&op) {
@@ -362,8 +438,9 @@ impl Parser {
 
 fn infix_binding_power(op: &TType) -> Option<(usize, usize)> {
     let res = match op {
-        TType::PLUS | TType::MINUS => (1, 2),
-        TType::STAR | TType::SLASH => (3, 4),
+        TType::PLUS | TType::MINUS => (10, 20),
+        TType::STAR | TType::SLASH => (30, 40),
+        TType::EQUALEQUAL => (5, 6),
         _ => return None,
     };
     Some(res)
