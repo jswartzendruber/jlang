@@ -2,12 +2,12 @@ use crate::parser::*;
 use crate::tac::*;
 use std::collections::HashMap;
 
-struct RSP {
+struct Rsp {
     offset: usize,
     func_begin: usize,
 }
 
-impl RSP {
+impl Rsp {
     fn new() -> Self {
         Self {
             offset: 0,
@@ -31,27 +31,27 @@ impl RSP {
     }
 }
 
-pub struct ASM {
+pub struct Asm {
     pub data_output: Vec<String>,
     pub text_output: Vec<String>,
     var_table: HashMap<VirtReg, usize>,
-    rsp: RSP,
+    rsp: Rsp,
 }
 
-impl ASM {
-    pub fn generate(tac: &mut TAC) -> Self {
+impl Asm {
+    pub fn generate(tac: &mut Tac) -> Self {
         let mut asm = Self {
             data_output: vec![],
             text_output: vec![],
             var_table: HashMap::new(),
-            rsp: RSP::new(),
+            rsp: Rsp::new(),
         };
 
         asm.text_output.push(".global _start".to_string());
 
         for literal in &tac.large_literals {
             match literal {
-                TACLiteral::String { virt_reg, value } => {
+                TacLiteral::String { virt_reg, value } => {
                     asm.data_output.push(format!("._t{}:", virt_reg.id));
                     asm.data_output.push(format!(".ascii \"{}\"", value));
                     // asm.var_table.insert(*virt_reg, literal.clone());
@@ -61,46 +61,46 @@ impl ASM {
 
         for tacv in &tac.code {
             match tacv {
-                TACValue::Label { name } => {
+                TacValue::Label { name } => {
                     if name == "main" {
                         asm.text_output.push("_start:".to_string());
                     } else {
                         asm.text_output.push(format!("_{}:", name));
                     }
                 }
-                TACValue::BeginFunction { stack_bytes_needed } => {
+                TacValue::BeginFunction { stack_bytes_needed } => {
                     asm.text_output
                         .push(format!("sub ${}, %rsp", stack_bytes_needed));
                     asm.rsp.begin(*stack_bytes_needed);
                 }
-                TACValue::EndFunction => {
+                TacValue::EndFunction => {
                     asm.text_output
                         .push(format!("add ${}, %rsp", asm.rsp.func_begin));
                     asm.rsp.end();
                 }
-                TACValue::Double { target, .. } => {
+                TacValue::Double { target, .. } => {
                     // TODO: Support immediates that are larger than 32 bits
                     let offset = asm.rsp.push(8);
                     asm.var_table.insert(*target, offset);
                     asm.text_output.push(format!(
                         "movq ${}, -{}(%rsp)",
-                        tac.var_locations.get(&target).unwrap(),
+                        tac.var_locations.get(target).unwrap(),
                         offset
                     ));
                 }
-                TACValue::Quad { target, v1, op, v2 } => {
+                TacValue::Quad { target, v1, op, v2 } => {
                     let offset = asm.rsp.push(8);
                     match op {
                         Operation::Add => {
                             asm.text_output.push(format!(
                                 "mov -{}(%rsp), %rax",
-                                asm.var_table.get(&v1).unwrap()
+                                asm.var_table.get(v1).unwrap()
                             ));
                             asm.text_output.push(format!(
                                 "add -{}(%rsp), %rbx",
-                                asm.var_table.get(&v2).unwrap()
+                                asm.var_table.get(v2).unwrap()
                             ));
-                            asm.text_output.push(format!("add %rbx, %rax"));
+                            asm.text_output.push("add %rbx, %rax".to_string());
                             asm.text_output.push(format!("mov %rax, -{}(%rsp)", offset));
                         }
                         Operation::Sub => todo!(),
@@ -110,15 +110,15 @@ impl ASM {
                     };
                     asm.var_table.insert(*target, offset);
                 }
-                TACValue::PushVirtReg { virt_reg, arg_num } => {
-                    let offset = asm.var_table.get(&virt_reg).unwrap();
+                TacValue::PushVirtReg { virt_reg, arg_num } => {
+                    let offset = asm.var_table.get(virt_reg).unwrap();
                     match arg_num {
                         1 => asm.text_output.push(format!("mov -{}(%rsp), %rdi", offset)),
                         2 => asm.text_output.push(format!("mov -{}(%rsp), %rsi", offset)),
                         _ => todo!(),
                     }
                 }
-                TACValue::PushDefinedByte { virt_reg, arg_num } => {
+                TacValue::PushDefinedByte { virt_reg, arg_num } => {
                     let offset = asm.rsp.push(8);
                     asm.text_output
                         .push(format!("lea ._t{}(%rip), %r10", virt_reg.id));
@@ -130,7 +130,7 @@ impl ASM {
                         _ => todo!(),
                     }
                 }
-                TACValue::PushIntLiteral { value, arg_num } => {
+                TacValue::PushIntLiteral { value, arg_num } => {
                     let offset = asm.rsp.push(8);
                     asm.text_output
                         .push(format!("movq ${}, -{}(%rsp)", value, offset));
@@ -140,7 +140,7 @@ impl ASM {
                         _ => todo!(),
                     }
                 }
-                TACValue::Call { func_name } => {
+                TacValue::Call { func_name } => {
                     if func_name == "print_string" {
                         asm.text_output.push(".extern _la_print_string".to_string());
                         asm.text_output.push("call _la_print_string".to_string());

@@ -1,27 +1,27 @@
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TType {
-    COLONCOLON,
-    COLONEQUAL,
-    EQUALEQUAL,
-    SEMICOLON,
-    PIPEPIPE,
-    NUMBER,
-    RPAREN,
-    LCURLY,
-    RCURLY,
-    LPAREN,
-    STRING,
-    ARROW,
-    COLON,
-    COMMA,
-    IDENT,
-    SLASH,
-    MINUS,
-    STAR,
-    PLUS,
+    ColonColon,
+    ColonEqual,
+    EqualEqual,
+    Identifier,
+    Semicolon,
+    PipePipe,
+    Number,
+    RParen,
+    LParen,
+    RCurly,
+    LCurly,
+    String,
+    Arrow,
+    Colon,
+    Comma,
+    Slash,
+    Minus,
+    Star,
+    Plus,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Token {
     pub ttype: TType,
     start_idx: usize,
@@ -74,19 +74,19 @@ impl Tokens {
 
     pub fn peek(&self) -> Option<&Token> {
         if self.curr_idx + 1 < self.tokens.len() {
-            return Some(&self.tokens[self.curr_idx + 1]);
+            Some(&self.tokens[self.curr_idx + 1])
         } else {
-            return None;
+            None
         }
     }
 
     // Returns current value, and then advances one token.
     pub fn advance(&mut self) -> Option<&Token> {
         if self.is_at_end() {
-            return None;
+            None
         } else {
             self.curr_idx += 1;
-            return Some(&self.tokens[self.curr_idx - 1]);
+            Some(&self.tokens[self.curr_idx - 1])
         }
     }
 
@@ -135,56 +135,56 @@ impl Lexer {
                 lexer.curr_idx += 1;
             } else if c == '(' {
                 lexer.tokens.tokens.push(Token::new(
-                    TType::LPAREN,
+                    TType::LParen,
                     lexer.curr_idx,
                     lexer.curr_idx + 1,
                 ));
                 lexer.curr_idx += 1;
             } else if c == ')' {
                 lexer.tokens.tokens.push(Token::new(
-                    TType::RPAREN,
+                    TType::RParen,
                     lexer.curr_idx,
                     lexer.curr_idx + 1,
                 ));
                 lexer.curr_idx += 1;
             } else if c == '{' {
                 lexer.tokens.tokens.push(Token::new(
-                    TType::LCURLY,
+                    TType::LCurly,
                     lexer.curr_idx,
                     lexer.curr_idx + 1,
                 ));
                 lexer.curr_idx += 1;
             } else if c == '}' {
                 lexer.tokens.tokens.push(Token::new(
-                    TType::RCURLY,
+                    TType::RCurly,
                     lexer.curr_idx,
                     lexer.curr_idx + 1,
                 ));
                 lexer.curr_idx += 1
             } else if c == ';' {
                 lexer.tokens.tokens.push(Token::new(
-                    TType::SEMICOLON,
+                    TType::Semicolon,
                     lexer.curr_idx,
                     lexer.curr_idx + 1,
                 ));
                 lexer.curr_idx += 1
             } else if c == ',' {
                 lexer.tokens.tokens.push(Token::new(
-                    TType::COMMA,
+                    TType::Comma,
                     lexer.curr_idx,
                     lexer.curr_idx + 1,
                 ));
                 lexer.curr_idx += 1
             } else if c == '+' {
                 lexer.tokens.tokens.push(Token::new(
-                    TType::PLUS,
+                    TType::Plus,
                     lexer.curr_idx,
                     lexer.curr_idx + 1,
                 ));
                 lexer.curr_idx += 1
             } else if c == '*' {
                 lexer.tokens.tokens.push(Token::new(
-                    TType::STAR,
+                    TType::Star,
                     lexer.curr_idx,
                     lexer.curr_idx + 1,
                 ));
@@ -196,7 +196,7 @@ impl Lexer {
                     }
                 } else {
                     lexer.tokens.tokens.push(Token::new(
-                        TType::SLASH,
+                        TType::Slash,
                         lexer.curr_idx,
                         lexer.curr_idx + 1,
                     ));
@@ -205,7 +205,7 @@ impl Lexer {
             } else if c == '=' {
                 if lexer.curr_idx + 1 < bytes.len() && bytes[lexer.curr_idx + 1] == b'=' {
                     lexer.tokens.tokens.push(Token::new(
-                        TType::EQUALEQUAL,
+                        TType::EqualEqual,
                         lexer.curr_idx,
                         lexer.curr_idx + 2,
                     ));
@@ -216,7 +216,7 @@ impl Lexer {
             } else if c == '|' {
                 if lexer.curr_idx + 1 < bytes.len() && bytes[lexer.curr_idx + 1] == b'|' {
                     lexer.tokens.tokens.push(Token::new(
-                        TType::PIPEPIPE,
+                        TType::PipePipe,
                         lexer.curr_idx,
                         lexer.curr_idx + 2,
                     ));
@@ -227,21 +227,21 @@ impl Lexer {
             } else if c == ':' {
                 if lexer.curr_idx + 1 < bytes.len() && bytes[lexer.curr_idx + 1] == b':' {
                     lexer.tokens.tokens.push(Token::new(
-                        TType::COLONCOLON,
+                        TType::ColonColon,
                         lexer.curr_idx,
                         lexer.curr_idx + 2,
                     ));
                     lexer.curr_idx += 2;
                 } else if lexer.curr_idx + 1 < bytes.len() && bytes[lexer.curr_idx + 1] == b'=' {
                     lexer.tokens.tokens.push(Token::new(
-                        TType::COLONEQUAL,
+                        TType::ColonEqual,
                         lexer.curr_idx,
                         lexer.curr_idx + 2,
                     ));
                     lexer.curr_idx += 2;
                 } else {
                     lexer.tokens.tokens.push(Token::new(
-                        TType::COLON,
+                        TType::Colon,
                         lexer.curr_idx,
                         lexer.curr_idx + 1,
                     ));
@@ -250,14 +250,14 @@ impl Lexer {
             } else if c == '-' {
                 if lexer.curr_idx + 1 < bytes.len() && bytes[lexer.curr_idx + 1] == b'>' {
                     lexer.tokens.tokens.push(Token::new(
-                        TType::ARROW,
+                        TType::Arrow,
                         lexer.curr_idx,
                         lexer.curr_idx + 2,
                     ));
                     lexer.curr_idx += 2;
                 } else {
                     lexer.tokens.tokens.push(Token::new(
-                        TType::MINUS,
+                        TType::Minus,
                         lexer.curr_idx,
                         lexer.curr_idx + 1,
                     ));
@@ -273,7 +273,7 @@ impl Lexer {
                 lexer
                     .tokens
                     .tokens
-                    .push(Token::new(TType::NUMBER, start, lexer.curr_idx));
+                    .push(Token::new(TType::Number, start, lexer.curr_idx));
             } else if c.is_ascii_alphanumeric() || c == '_' {
                 let start = lexer.curr_idx;
                 while lexer.curr_idx < bytes.len()
@@ -285,7 +285,7 @@ impl Lexer {
                 lexer
                     .tokens
                     .tokens
-                    .push(Token::new(TType::IDENT, start, lexer.curr_idx));
+                    .push(Token::new(TType::Identifier, start, lexer.curr_idx));
             } else if c == '"' {
                 let start = lexer.curr_idx;
                 while lexer.curr_idx + 1 < bytes.len() && bytes[lexer.curr_idx + 1] != b'"' {
@@ -295,7 +295,7 @@ impl Lexer {
                 lexer
                     .tokens
                     .tokens
-                    .push(Token::new(TType::STRING, start + 1, lexer.curr_idx - 1));
+                    .push(Token::new(TType::String, start + 1, lexer.curr_idx - 1));
             } else {
                 println!("bad tok");
                 println!("{:?}", lexer.tokens);

@@ -35,7 +35,7 @@ fn main() {
 
     // typecheck here?
 
-    let mut tac = TAC::generate(&mut parser);
+    let mut tac = Tac::generate(&mut parser);
     for line in &tac.large_literals {
         println!("{}", line);
     }
@@ -45,7 +45,7 @@ fn main() {
     }
     println!();
 
-    let asm = ASM::generate(&mut tac);
+    let asm = Asm::generate(&mut tac);
     for line in &asm.data_output {
         println!("{}", line);
     }
@@ -56,14 +56,16 @@ fn main() {
 
     let mut file = File::create("../out.asm").unwrap();
     for line in &asm.data_output {
-        file.write(line.as_bytes())
+        file.write_all(line.as_bytes())
             .expect("Failed to write assembly to file");
-        file.write(b"\n").expect("Failed to write assembly to file");
+        file.write_all(b"\n")
+            .expect("Failed to write assembly to file");
     }
     for line in &asm.text_output {
-        file.write(line.as_bytes())
+        file.write_all(line.as_bytes())
             .expect("Failed to write assembly to file");
-        file.write(b"\n").expect("Failed to write assembly to file");
+        file.write_all(b"\n")
+            .expect("Failed to write assembly to file");
     }
 
     Command::new("as")

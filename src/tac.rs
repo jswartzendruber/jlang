@@ -51,7 +51,7 @@ impl fmt::Display for VirtRegArg {
 }
 
 #[derive(Debug)]
-pub enum TACValue {
+pub enum TacValue {
     Label {
         name: String,
     },
@@ -86,53 +86,53 @@ pub enum TACValue {
     },
 }
 
-impl fmt::Display for TACValue {
+impl fmt::Display for TacValue {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            TACValue::Label { name } => write!(f, "{}:", name),
-            TACValue::BeginFunction { stack_bytes_needed } => {
+            TacValue::Label { name } => write!(f, "{}:", name),
+            TacValue::BeginFunction { stack_bytes_needed } => {
                 write!(f, "BeginFunction {}", stack_bytes_needed)
             }
-            TACValue::EndFunction => write!(f, "EndFunction"),
-            TACValue::Double { target, value } => write!(f, "{} = {}", target, value),
-            TACValue::Quad { target, v1, op, v2 } => {
+            TacValue::EndFunction => write!(f, "EndFunction"),
+            TacValue::Double { target, value } => write!(f, "{} = {}", target, value),
+            TacValue::Quad { target, v1, op, v2 } => {
                 write!(f, "{} = {} {} {}", target, v1, op, v2)
             }
-            TACValue::PushDefinedByte { virt_reg, arg_num } => {
+            TacValue::PushDefinedByte { virt_reg, arg_num } => {
                 write!(f, "PushArg {}, ({})", arg_num, virt_reg)
             }
-            TACValue::PushIntLiteral { value, arg_num } => {
+            TacValue::PushIntLiteral { value, arg_num } => {
                 write!(f, "PushArg {}, (${})", arg_num, value)
             }
-            TACValue::PushVirtReg { virt_reg, arg_num } => {
+            TacValue::PushVirtReg { virt_reg, arg_num } => {
                 write!(f, "PushArg {}, ({})", arg_num, virt_reg)
             }
-            TACValue::Call { func_name } => write!(f, "Call {}", func_name),
+            TacValue::Call { func_name } => write!(f, "Call {}", func_name),
         }
     }
 }
 
 #[derive(Debug, Clone)]
-pub enum TACLiteral {
+pub enum TacLiteral {
     String { virt_reg: VirtReg, value: String },
 }
 
-impl fmt::Display for TACLiteral {
+impl fmt::Display for TacLiteral {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            TACLiteral::String { virt_reg, value } => write!(f, "{} = \"{}\"", virt_reg, value),
+            TacLiteral::String { virt_reg, value } => write!(f, "{} = \"{}\"", virt_reg, value),
         }
     }
 }
 
-pub struct TAC {
-    pub code: Vec<TACValue>,
-    pub large_literals: Vec<TACLiteral>,
+pub struct Tac {
+    pub code: Vec<TacValue>,
+    pub large_literals: Vec<TacLiteral>,
     curr_reg_id: usize,
     pub var_locations: HashMap<VirtReg, VirtRegArg>,
 }
 
-impl TAC {
+impl Tac {
     fn new() -> Self {
         Self {
             code: vec![],
@@ -143,13 +143,13 @@ impl TAC {
     }
 
     pub fn generate(parser: &mut Parser) -> Self {
-        let mut tac = TAC::new();
+        let mut tac = Tac::new();
 
         match &parser.ast.node {
             Node::Function(f) => {
                 // Handle args here
 
-                tac.code.push(TACValue::Label {
+                tac.code.push(TacValue::Label {
                     name: f.name.clone(),
                 });
 
@@ -167,7 +167,7 @@ impl TAC {
     fn generate_function_call(&mut self, statement: &Statement) {
         match statement {
             Statement::FunctionCall(fc) => {
-                self.code.push(TACValue::BeginFunction {
+                self.code.push(TacValue::BeginFunction {
                     stack_bytes_needed: fc.stack_bytes_needed,
                 });
 
@@ -181,14 +181,14 @@ impl TAC {
                             for line in tac_list {
                                 self.code.push(line);
                             }
-                            self.code.push(TACValue::PushVirtReg {
+                            self.code.push(TacValue::PushVirtReg {
                                 virt_reg: expr_reg,
                                 arg_num: argc,
                             });
                         }
                         Argument::String(s) => {
-                            let newlines = s.matches("\\").count(); // may not always work
-                            self.code.push(TACValue::PushIntLiteral {
+                            let newlines = s.matches('\\').count(); // may not always work
+                            self.code.push(TacValue::PushIntLiteral {
                                 value: (s.len() - newlines) as i64,
                                 arg_num: argc,
                             });
@@ -196,28 +196,28 @@ impl TAC {
                             argc += 1;
 
                             // db string
-                            self.large_literals.push(TACLiteral::String {
+                            self.large_literals.push(TacLiteral::String {
                                 virt_reg,
                                 value: s.to_string(),
                             });
-                            self.code.push(TACValue::PushDefinedByte {
-                                virt_reg: virt_reg,
+                            self.code.push(TacValue::PushDefinedByte {
+                                virt_reg,
                                 arg_num: argc,
                             });
                         }
                     }
                 }
 
-                self.code.push(TACValue::Call {
+                self.code.push(TacValue::Call {
                     func_name: fc.name.clone(),
                 });
-                self.code.push(TACValue::EndFunction);
+                self.code.push(TacValue::EndFunction);
             }
-            Statement::If(i) => todo!(),
+            Statement::If(_i) => todo!(),
         }
     }
 
-    fn generate_expression(&mut self, tac_list: &mut Vec<TACValue>, expr: &Expression) -> VirtReg {
+    fn generate_expression(&mut self, tac_list: &mut Vec<TacValue>, expr: &Expression) -> VirtReg {
         let virt_reg = self.new_virt_reg();
 
         let t1 = if let Some(left) = &expr.left {
@@ -244,8 +244,8 @@ impl TAC {
                     virt_reg,
                     VirtRegArg::MemoryAddress(MemoryAddress::VirtReg(virt_reg)),
                 );
-                tac_list.push(TACValue::Quad {
-                    target: virt_reg.clone(),
+                tac_list.push(TacValue::Quad {
+                    target: virt_reg,
                     v1: t1,
                     op: o.clone(),
                     v2: t2,
@@ -256,15 +256,15 @@ impl TAC {
         virt_reg
     }
 
-    fn generate_immediate(&mut self, tac_list: &mut Vec<TACValue>, val: Immediate) -> VirtReg {
+    fn generate_immediate(&mut self, tac_list: &mut Vec<TacValue>, val: Immediate) -> VirtReg {
         let virt_reg = self.new_virt_reg();
         self.var_locations
             .insert(virt_reg, VirtRegArg::Immediate(val));
 
         match val {
             Immediate::I64(_) => {
-                tac_list.push(TACValue::Double {
-                    target: virt_reg.clone(),
+                tac_list.push(TacValue::Double {
+                    target: virt_reg,
                     value: VirtRegArg::Immediate(val),
                 });
             }

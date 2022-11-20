@@ -47,11 +47,11 @@ impl fmt::Display for Operation {
 impl Operation {
     fn from(ttype: &TType) -> Self {
         match ttype {
-            TType::PLUS => Operation::Add,
-            TType::MINUS => Operation::Sub,
-            TType::STAR => Operation::Mul,
-            TType::SLASH => Operation::Div,
-            TType::EQUALEQUAL => Operation::EqEq,
+            TType::Plus => Operation::Add,
+            TType::Minus => Operation::Sub,
+            TType::Star => Operation::Mul,
+            TType::Slash => Operation::Div,
+            TType::EqualEqual => Operation::EqEq,
             _ => unreachable!(),
         }
     }
@@ -91,10 +91,10 @@ impl Expression {
         let mut total = 1;
 
         if let Some(left) = &expr.left {
-            total += Self::count_nodes(&left);
+            total += Self::count_nodes(left);
         }
         if let Some(right) = &expr.right {
-            total += Self::count_nodes(&right);
+            total += Self::count_nodes(right);
         }
 
         total
@@ -210,19 +210,19 @@ pub enum Node {
     Function(Function),
 }
 
-pub struct AST {
+pub struct Ast {
     pub node: Node,
-    left: Box<Option<AST>>,
-    right: Box<Option<AST>>,
+    left: Box<Option<Ast>>,
+    right: Box<Option<Ast>>,
 }
 
-impl AST {
-    fn new(node: Node, left: Box<Option<AST>>, right: Box<Option<AST>>) -> Self {
+impl Ast {
+    fn new(node: Node, left: Box<Option<Ast>>, right: Box<Option<Ast>>) -> Self {
         Self { node, left, right }
     }
 }
 
-impl fmt::Display for AST {
+impl fmt::Display for Ast {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.node {
             Node::Function(func) => write!(f, "{}", func),
@@ -232,7 +232,7 @@ impl fmt::Display for AST {
 
 pub struct Parser {
     file_contents: String,
-    pub ast: AST,
+    pub ast: Ast,
 }
 
 impl Parser {
@@ -241,7 +241,7 @@ impl Parser {
             file_contents,
 
             // Immediately overwritten. Used to avoid Option<>
-            ast: AST::new(
+            ast: Ast::new(
                 Node::Function(Function::new("a".to_string(), vec![], vec![], Type::Void)),
                 Box::new(None),
                 Box::new(None),
@@ -252,7 +252,7 @@ impl Parser {
     pub fn parse(lexer: &mut Lexer) -> Self {
         let mut parser = Self::new(lexer.file_contents.clone());
 
-        parser.ast = AST::new(
+        parser.ast = Ast::new(
             parser.parse_function(&mut lexer.tokens),
             Box::new(None),
             Box::new(None),
@@ -267,28 +267,28 @@ impl Parser {
             .expect("Expected function name")
             .copy_contents(&self.file_contents);
 
-        tokens.expect(TType::COLONCOLON);
-        tokens.expect(TType::LPAREN);
+        tokens.expect(TType::ColonColon);
+        tokens.expect(TType::LParen);
 
         // handle arguments here
 
-        tokens.expect(TType::RPAREN);
-        tokens.expect(TType::LCURLY);
+        tokens.expect(TType::RParen);
+        tokens.expect(TType::LCurly);
 
         // Collect statements until end of function
         let mut statements = vec![];
-        while tokens.current().ttype != TType::RCURLY {
+        while tokens.current().ttype != TType::RCurly {
             statements.push(self.parse_statement(tokens));
         }
 
-        tokens.expect(TType::RCURLY);
+        tokens.expect(TType::RCurly);
 
         Node::Function(Function::new(func_name, vec![], statements, Type::Void))
     }
 
     fn parse_statement(&mut self, tokens: &mut Tokens) -> Statement {
         match tokens.peek().expect("Expected statement").ttype {
-            TType::LPAREN => Statement::FunctionCall(self.parse_function_call(tokens)),
+            TType::LParen => Statement::FunctionCall(self.parse_function_call(tokens)),
             _ => Statement::If(self.parse_if_statement(tokens)),
         }
     }
@@ -296,7 +296,7 @@ impl Parser {
     fn parse_if_statement(&mut self, tokens: &mut Tokens) -> If {
         let mut curr_token = tokens.current();
         if curr_token.copy_contents(&self.file_contents) == "if" {
-            tokens.expect(TType::IDENT);
+            tokens.expect(TType::Identifier);
         } else {
             println!(
                 "Error: Unexpected identifier in if statement: '{}'",
@@ -306,21 +306,20 @@ impl Parser {
         }
 
         let condition = self.parse_expression(tokens, 0);
-        tokens.expect(TType::LCURLY);
+        tokens.expect(TType::LCurly);
 
         // TODO: Handle arbitrary number of statements
-        let mut if_true = vec![];
-        if_true.push(self.parse_statement(tokens));
-        tokens.expect(TType::RCURLY);
+        let if_true = vec![self.parse_statement(tokens)];
+        tokens.expect(TType::RCurly);
 
         curr_token = tokens.current();
         let if_false = if curr_token.copy_contents(&self.file_contents) == "else" {
-            tokens.expect(TType::IDENT);
+            tokens.expect(TType::Identifier);
             let mut v = vec![];
 
-            tokens.expect(TType::LCURLY);
+            tokens.expect(TType::LCurly);
             v.push(self.parse_statement(tokens));
-            tokens.expect(TType::RCURLY);
+            tokens.expect(TType::RCurly);
 
             Some(v)
         } else {
@@ -337,18 +336,18 @@ impl Parser {
             .copy_contents(&self.file_contents);
         let mut stack_bytes_needed = 0;
 
-        tokens.expect(TType::LPAREN);
+        tokens.expect(TType::LParen);
 
         // Collect arguments, if any
         let mut arguments = vec![];
-        while tokens.current().ttype != TType::RPAREN {
+        while tokens.current().ttype != TType::RParen {
             let (arg, bytes) = self.parse_argument(tokens);
             arguments.push(arg);
             stack_bytes_needed += bytes;
         }
 
-        tokens.expect(TType::RPAREN);
-        tokens.expect(TType::SEMICOLON);
+        tokens.expect(TType::RParen);
+        tokens.expect(TType::Semicolon);
 
         FunctionCall::new(func, arguments, stack_bytes_needed)
     }
@@ -357,13 +356,13 @@ impl Parser {
         let curr = tokens.current().clone();
 
         let arg = match curr.ttype {
-            TType::STRING => {
+            TType::String => {
                 let arg = Argument::String(curr.copy_contents(&self.file_contents));
                 tokens.advance();
                 let bytes = 16; // char* = 8, length = 8
                 (arg, bytes)
             }
-            TType::NUMBER | TType::LPAREN => {
+            TType::Number | TType::LParen => {
                 let expr = self.parse_expression(tokens, 0);
                 let count = Expression::count_nodes(&expr) * 8;
                 (Argument::Expression(expr), count)
@@ -378,8 +377,8 @@ impl Parser {
         };
 
         // Skip over comma if it exists, so we can collect other args
-        if tokens.current().ttype == TType::COMMA {
-            tokens.expect(TType::COMMA);
+        if tokens.current().ttype == TType::Comma {
+            tokens.expect(TType::Comma);
         }
 
         arg
@@ -388,13 +387,13 @@ impl Parser {
     fn parse_expression(&mut self, tokens: &mut Tokens, min_bp: usize) -> Expression {
         let lhs_token = tokens.advance().expect("Expected expr");
         let mut lhs = match lhs_token.ttype {
-            TType::NUMBER => {
+            TType::Number => {
                 let string_value = lhs_token.copy_contents(&self.file_contents);
                 Expression::new_leaf(ExpressionValue::I64(string_value.parse().unwrap()))
             }
-            TType::LPAREN => {
+            TType::LParen => {
                 let lhs = self.parse_expression(tokens, 0);
-                tokens.expect(TType::RPAREN);
+                tokens.expect(TType::RParen);
                 lhs
             }
             _ => {
@@ -409,7 +408,7 @@ impl Parser {
         loop {
             let op_token = tokens.current();
             let op = match op_token.ttype {
-                TType::PLUS | TType::MINUS | TType::STAR | TType::SLASH | TType::EQUALEQUAL => {
+                TType::Plus | TType::Minus | TType::Star | TType::Slash | TType::EqualEqual => {
                     op_token.ttype.clone()
                 }
                 _ => break,
@@ -438,9 +437,9 @@ impl Parser {
 
 fn infix_binding_power(op: &TType) -> Option<(usize, usize)> {
     let res = match op {
-        TType::PLUS | TType::MINUS => (10, 20),
-        TType::STAR | TType::SLASH => (30, 40),
-        TType::EQUALEQUAL => (5, 6),
+        TType::Plus | TType::Minus => (10, 20),
+        TType::Star | TType::Slash => (30, 40),
+        TType::EqualEqual => (5, 6),
         _ => return None,
     };
     Some(res)
