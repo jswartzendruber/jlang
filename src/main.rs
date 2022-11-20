@@ -30,20 +30,20 @@ fn main() {
     // println!();
 
     let mut parser = Parser::parse(&mut lexer);
-    parser.ast.print();
-    println!();
+    // parser.ast.print();
+    // println!();
 
     // typecheck here?
 
     let mut tac = TAC::generate(&mut parser);
-    // for line in &tac.large_literals {
-    // 	println!("{:?}", line);
-    // }
-    // println!();
-    // for line in &tac.code {
-    // 	println!("{:?}", line);
-    // }
-    // println!();
+    for line in &tac.large_literals {
+	println!("{:?}", line);
+    }
+    println!();
+    for line in &tac.code {
+	println!("{:?}", line);
+    }
+    println!();
 
     let asm = ASM::generate(&mut tac);
     // for line in &asm.data_output {

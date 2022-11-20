@@ -13,7 +13,7 @@ pub enum Argument {
     String(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Operation {
     Add,
     Sub,
@@ -33,26 +33,42 @@ impl Operation {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ExpressionValue {
     Operation(Operation),
     I64(i64),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Expression {
-    value: ExpressionValue,
-    left: Box<Option<Expression>>,
-    right: Box<Option<Expression>>,
+    pub value: ExpressionValue,
+    pub left: Option<Box<Expression>>,
+    pub right: Option<Box<Expression>>,
 }
 
 impl Expression {
-    fn new(value: ExpressionValue, left: Box<Option<Expression>>, right: Box<Option<Expression>>) -> Self {
+    fn new(value: ExpressionValue, left: Option<Box<Expression>>, right: Option<Box<Expression>>) -> Self {
 	Self { value, left, right }
     }
 
     fn new_leaf(value: ExpressionValue) -> Self {
-	Self { value, left: Box::new(None), right: Box::new(None) }
+	Self { value, left: None, right: None }
+    }
+
+    fn count_value_nodes(expr: &Expression) -> usize {
+	let mut total = match &expr.value {
+	    ExpressionValue::Operation(_) => 0,
+	    ExpressionValue::I64(_) => 1,
+	};
+
+	if let Some(left) = &expr.left {
+	    total += Self::count_value_nodes(&left);
+	}
+	if let Some(right) = &expr.right {
+	    total += Self::count_value_nodes(&right);
+	}
+
+	total
     }
 }
 
@@ -220,7 +236,11 @@ impl Parser {
 		let bytes = 16; // char* = 8, length = 8
 		(arg, bytes)
 	    },
-	    TType::NUMBER => (Argument::Expression(self.parse_expression(tokens, 0)), 8),
+	    TType::NUMBER | TType::LPAREN => {
+		let expr = self.parse_expression(tokens, 0);
+		let count = Expression::count_value_nodes(&expr) * 8;
+		(Argument::Expression(expr), count)
+	    },
 	    _ => {
 		println!("Error: Unexpected argument: '{}'", curr.display(&self.file_contents));
 		std::process::exit(1);
@@ -272,7 +292,7 @@ impl Parser {
 		tokens.advance();
 		let rhs = self.parse_expression(tokens, rbp);
 
-		lhs = Expression::new(ExpressionValue::Operation(Operation::from(&op)), Box::new(Some(lhs)), Box::new(Some(rhs)));
+		lhs = Expression::new(ExpressionValue::Operation(Operation::from(&op)), Some(Box::new(lhs)), Some(Box::new(rhs)));
 		continue;
 	    }
 	}
