@@ -108,9 +108,9 @@ impl Asm {
                             asm.text_output.push(format!("mov %rax, -{}(%rsp)", offset));
                         }
                         Operation::EqEq => {
-		            asm.eqeq(v1, v2);
+                            asm.eqeq(v1, v2);
                             asm.text_output.push(format!("mov %rax, -{}(%rsp)", offset));
-			},
+                        }
                     };
                     asm.var_table.insert(*target, offset);
                 }
@@ -216,7 +216,7 @@ impl Asm {
     }
 
     pub fn eqeq(&mut self, v1: &VirtReg, v2: &VirtReg) {
-	self.text_output.push(format!(
+        self.text_output.push(format!(
             "mov -{}(%rsp), %rax",
             self.var_table.get(v1).unwrap()
         ));
@@ -225,7 +225,7 @@ impl Asm {
             self.var_table.get(v2).unwrap()
         ));
         self.text_output.push("cmp %rbx, %rax".to_string());
-	self.text_output.push("sete %al".to_string()); // Set al to 1 if equal, 0 otherwise
-	self.text_output.push("movzx %al, %rax".to_string()); // Copy al to rax
+        self.text_output.push("sete %al".to_string()); // Set al to 1 if equal, 0 otherwise
+        self.text_output.push("movzx %al, %rax".to_string()); // Copy al to rax
     }
 }

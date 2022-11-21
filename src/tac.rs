@@ -227,7 +227,7 @@ impl Tac {
             ExpressionValue::Operation(o) => {
                 let t1 = match expr.left.as_ref().unwrap().value {
                     ExpressionValue::I64(i) => {
-			let vr = self.new_virt_reg();
+                        let vr = self.new_virt_reg();
                         self.generate_immediate(tac_list, Immediate::I64(i), vr)
                     }
                     ExpressionValue::Operation(_) => {
@@ -237,7 +237,7 @@ impl Tac {
 
                 let t2 = match expr.right.as_ref().unwrap().value {
                     ExpressionValue::I64(i) => {
-			let vr = self.new_virt_reg();
+                        let vr = self.new_virt_reg();
                         self.generate_immediate(tac_list, Immediate::I64(i), vr)
                     }
                     ExpressionValue::Operation(_) => {

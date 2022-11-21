@@ -122,7 +122,7 @@ impl fmt::Display for FunctionCall {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{}( {:#?} ) Stack: {}",
+            "{}( {:#?} ) Stack: {}\n",
             self.name, self.args, self.stack_bytes_needed
         )
     }
@@ -267,13 +267,13 @@ impl Parser {
             .expect("Expected function name")
             .copy_contents(&self.file_contents);
 
-        tokens.expect(TType::ColonColon);
-        tokens.expect(TType::LParen);
+        tokens.expect(TType::ColonColon, &self.file_contents);
+        tokens.expect(TType::LParen, &self.file_contents);
 
         // handle arguments here
 
-        tokens.expect(TType::RParen);
-        tokens.expect(TType::LCurly);
+        tokens.expect(TType::RParen, &self.file_contents);
+        tokens.expect(TType::LCurly, &self.file_contents);
 
         // Collect statements until end of function
         let mut statements = vec![];
@@ -281,7 +281,7 @@ impl Parser {
             statements.push(self.parse_statement(tokens));
         }
 
-        tokens.expect(TType::RCurly);
+        tokens.expect(TType::RCurly, &self.file_contents);
 
         Node::Function(Function::new(func_name, vec![], statements, Type::Void))
     }
@@ -296,30 +296,26 @@ impl Parser {
     fn parse_if_statement(&mut self, tokens: &mut Tokens) -> If {
         let mut curr_token = tokens.current();
         if curr_token.copy_contents(&self.file_contents) == "if" {
-            tokens.expect(TType::Identifier);
+            tokens.expect(TType::Identifier, &self.file_contents);
         } else {
-            println!(
-                "Error: Unexpected identifier in if statement: '{}'",
-                curr_token.display(&self.file_contents)
-            );
-            std::process::exit(1);
+	    self.error(&curr_token, "identifier");
         }
 
         let condition = self.parse_expression(tokens, 0);
-        tokens.expect(TType::LCurly);
+        tokens.expect(TType::LCurly, &self.file_contents);
 
         // TODO: Handle arbitrary number of statements
         let if_true = vec![self.parse_statement(tokens)];
-        tokens.expect(TType::RCurly);
+        tokens.expect(TType::RCurly, &self.file_contents);
 
         curr_token = tokens.current();
         let if_false = if curr_token.copy_contents(&self.file_contents) == "else" {
-            tokens.expect(TType::Identifier);
+            tokens.expect(TType::Identifier, &self.file_contents);
             let mut v = vec![];
 
-            tokens.expect(TType::LCurly);
+            tokens.expect(TType::LCurly, &self.file_contents);
             v.push(self.parse_statement(tokens));
-            tokens.expect(TType::RCurly);
+            tokens.expect(TType::RCurly, &self.file_contents);
 
             Some(v)
         } else {
@@ -334,54 +330,60 @@ impl Parser {
             .advance()
             .expect("Expected function name")
             .copy_contents(&self.file_contents);
-        let mut stack_bytes_needed = 0;
 
-        tokens.expect(TType::LParen);
+        tokens.expect(TType::LParen, &self.file_contents);
 
         // Collect arguments, if any
-        let mut arguments = vec![];
-        while tokens.current().ttype != TType::RParen {
-            let (arg, bytes) = self.parse_argument(tokens);
-            arguments.push(arg);
-            stack_bytes_needed += bytes;
-        }
+        let (arguments, stack_bytes_needed) = self.parse_arguments(tokens);
 
-        tokens.expect(TType::RParen);
-        tokens.expect(TType::Semicolon);
+        tokens.expect(TType::RParen, &self.file_contents);
+        tokens.expect(TType::Semicolon, &self.file_contents);
 
         FunctionCall::new(func, arguments, stack_bytes_needed)
     }
 
-    fn parse_argument(&mut self, tokens: &mut Tokens) -> (Argument, usize) {
-        let curr = tokens.current().clone();
+    fn parse_arguments(&mut self, tokens: &mut Tokens) -> (Vec<Argument>, usize) {
+	let mut args = vec![];
+	let mut bytes = 0;
 
-        let arg = match curr.ttype {
+	self.parse_argument(tokens, &mut args, &mut bytes);
+
+	(args, bytes)
+    }
+
+    fn parse_argument(&mut self, tokens: &mut Tokens, args: &mut Vec<Argument>, bytes: &mut usize) {
+        let curr = tokens.current();
+
+        match curr.ttype {
             TType::String => {
                 let arg = Argument::String(curr.copy_contents(&self.file_contents));
                 tokens.advance();
-                let bytes = 16; // char* = 8, length = 8
-                (arg, bytes)
+
+		if tokens.current().ttype == TType::Comma {
+		    tokens.expect(TType::Comma, &self.file_contents);
+		    self.parse_argument(tokens, args, bytes);
+		}
+
+		args.push(arg);
+		*bytes += 16; // char* = 8, length = 8
             }
             TType::Number | TType::LParen => {
                 let expr = self.parse_expression(tokens, 0);
                 let count = Expression::count_nodes(&expr) * 8;
-                (Argument::Expression(expr), count)
+
+		if tokens.current().ttype == TType::Comma {
+		    tokens.expect(TType::Comma, &self.file_contents);
+		    self.parse_argument(tokens, args, bytes);
+		}
+
+		args.push(Argument::Expression(expr));
+		*bytes += count;
             }
             _ => {
-                println!(
-                    "Error: Unexpected argument: '{}'",
-                    curr.display(&self.file_contents)
-                );
-                std::process::exit(1);
-            }
+		self.error(&curr, "argument");
+		unreachable!();
+	    }
         };
-
-        // Skip over comma if it exists, so we can collect other args
-        if tokens.current().ttype == TType::Comma {
-            tokens.expect(TType::Comma);
-        }
-
-        arg
     }
 
     fn parse_expression(&mut self, tokens: &mut Tokens, min_bp: usize) -> Expression {
@@ -393,15 +395,12 @@ impl Parser {
             }
             TType::LParen => {
                 let lhs = self.parse_expression(tokens, 0);
-                tokens.expect(TType::RParen);
+                tokens.expect(TType::RParen, &self.file_contents);
                 lhs
             }
             _ => {
-                println!(
-                    "Error: Unexpected token in expression: '{}'",
-                    lhs_token.display(&self.file_contents)
-                );
-                std::process::exit(1);
+		self.error(lhs_token, "token in expression");
+		unreachable!();
             }
         };
 
@@ -432,6 +431,18 @@ impl Parser {
         }
 
         lhs
+    }
+
+    fn error(&self, token: &Token, thing: &str) {
+	println!(
+	    "Error: Unexpected {} '{}' on line {}.",
+	    thing,
+            token.copy_contents(&self.file_contents).trim(),
+	    token.from_line
+	);
+	println!("  {}", token.copy_line(&self.file_contents).trim());
+	println!();
+	std::process::exit(1);
     }
 }
 
