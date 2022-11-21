@@ -220,26 +220,31 @@ impl Tac {
     fn generate_expression(&mut self, tac_list: &mut Vec<TacValue>, expr: &Expression) -> VirtReg {
         let virt_reg = self.new_virt_reg();
 
-        let t1 = if let Some(left) = &expr.left {
-            match left.value {
-                ExpressionValue::I64(i) => self.generate_immediate(tac_list, Immediate::I64(i)),
-                ExpressionValue::Operation(_) => self.generate_expression(tac_list, left),
-            }
-        } else {
-            unreachable!();
-        };
-        let t2 = if let Some(right) = &expr.right {
-            match right.value {
-                ExpressionValue::I64(i) => self.generate_immediate(tac_list, Immediate::I64(i)),
-                ExpressionValue::Operation(_) => self.generate_expression(tac_list, right),
-            }
-        } else {
-            unreachable!();
-        };
-
         match &expr.value {
-            ExpressionValue::I64(_) => unreachable!(),
+            ExpressionValue::I64(i) => {
+                self.generate_immediate(tac_list, Immediate::I64(*i), virt_reg);
+            }
             ExpressionValue::Operation(o) => {
+                let t1 = match expr.left.as_ref().unwrap().value {
+                    ExpressionValue::I64(i) => {
+			let vr = self.new_virt_reg();
+                        self.generate_immediate(tac_list, Immediate::I64(i), vr)
+                    }
+                    ExpressionValue::Operation(_) => {
+                        self.generate_expression(tac_list, expr.left.as_ref().unwrap())
+                    }
+                };
+
+                let t2 = match expr.right.as_ref().unwrap().value {
+                    ExpressionValue::I64(i) => {
+			let vr = self.new_virt_reg();
+                        self.generate_immediate(tac_list, Immediate::I64(i), vr)
+                    }
+                    ExpressionValue::Operation(_) => {
+                        self.generate_expression(tac_list, expr.right.as_ref().unwrap())
+                    }
+                };
+
                 self.var_locations.insert(
                     virt_reg,
                     VirtRegArg::MemoryAddress(MemoryAddress::VirtReg(virt_reg)),
@@ -256,8 +261,12 @@ impl Tac {
         virt_reg
     }
 
-    fn generate_immediate(&mut self, tac_list: &mut Vec<TacValue>, val: Immediate) -> VirtReg {
-        let virt_reg = self.new_virt_reg();
+    fn generate_immediate(
+        &mut self,
+        tac_list: &mut Vec<TacValue>,
+        val: Immediate,
+        virt_reg: VirtReg,
+    ) -> VirtReg {
         self.var_locations
             .insert(virt_reg, VirtRegArg::Immediate(val));
 

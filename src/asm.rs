@@ -34,7 +34,7 @@ impl Rsp {
 pub struct Asm {
     pub data_output: Vec<String>,
     pub text_output: Vec<String>,
-    var_table: HashMap<VirtReg, usize>,
+    var_table: HashMap<VirtReg, usize>, // Register to stack offset
     rsp: Rsp,
 }
 
@@ -92,21 +92,25 @@ impl Asm {
                     let offset = asm.rsp.push(8);
                     match op {
                         Operation::Add => {
-                            asm.text_output.push(format!(
-                                "mov -{}(%rsp), %rax",
-                                asm.var_table.get(v1).unwrap()
-                            ));
-                            asm.text_output.push(format!(
-                                "add -{}(%rsp), %rbx",
-                                asm.var_table.get(v2).unwrap()
-                            ));
-                            asm.text_output.push("add %rbx, %rax".to_string());
+                            asm.add(v1, v2);
                             asm.text_output.push(format!("mov %rax, -{}(%rsp)", offset));
                         }
-                        Operation::Sub => todo!(),
-                        Operation::Mul => todo!(),
-                        Operation::Div => todo!(),
-                        Operation::EqEq => todo!(),
+                        Operation::Sub => {
+                            asm.sub(v1, v2);
+                            asm.text_output.push(format!("mov %rax, -{}(%rsp)", offset));
+                        }
+                        Operation::Mul => {
+                            asm.mul(v1, v2);
+                            asm.text_output.push(format!("mov %rax, -{}(%rsp)", offset));
+                        }
+                        Operation::Div => {
+                            asm.div(v1, v2);
+                            asm.text_output.push(format!("mov %rax, -{}(%rsp)", offset));
+                        }
+                        Operation::EqEq => {
+		            asm.eqeq(v1, v2);
+                            asm.text_output.push(format!("mov %rax, -{}(%rsp)", offset));
+			},
                     };
                     asm.var_table.insert(*target, offset);
                 }
@@ -159,5 +163,69 @@ impl Asm {
         asm.text_output.push("syscall".to_string());
 
         asm
+    }
+
+    pub fn add(&mut self, v1: &VirtReg, v2: &VirtReg) {
+        self.text_output.push(format!(
+            "mov -{}(%rsp), %rax",
+            self.var_table.get(v1).unwrap()
+        ));
+        self.text_output.push(format!(
+            "mov -{}(%rsp), %rbx",
+            self.var_table.get(v2).unwrap()
+        ));
+        self.text_output.push("add %rbx, %rax".to_string());
+    }
+
+    pub fn sub(&mut self, v1: &VirtReg, v2: &VirtReg) {
+        self.text_output.push(format!(
+            "mov -{}(%rsp), %rax",
+            self.var_table.get(v1).unwrap()
+        ));
+        self.text_output.push(format!(
+            "mov -{}(%rsp), %rbx",
+            self.var_table.get(v2).unwrap()
+        ));
+        self.text_output.push("sub %rbx, %rax".to_string());
+    }
+
+    pub fn mul(&mut self, v1: &VirtReg, v2: &VirtReg) {
+        self.text_output.push(format!(
+            "mov -{}(%rsp), %rax",
+            self.var_table.get(v1).unwrap()
+        ));
+        self.text_output.push(format!(
+            "mov -{}(%rsp), %rbx",
+            self.var_table.get(v2).unwrap()
+        ));
+        self.text_output.push("imul %rbx, %rax".to_string());
+    }
+
+    pub fn div(&mut self, v1: &VirtReg, v2: &VirtReg) {
+        self.text_output.push(format!(
+            "mov -{}(%rsp), %rax",
+            self.var_table.get(v1).unwrap()
+        ));
+        self.text_output.push(format!(
+            "mov -{}(%rsp), %rbx", // Divisor
+            self.var_table.get(v2).unwrap()
+        ));
+        self.text_output.push("mov $0, %rdx".to_string()); // Clear high bits of dividend
+        self.text_output.push("cqto".to_string()); // Sign extend rax to rdx:rax
+        self.text_output.push("idiv %rbx".to_string());
+    }
+
+    pub fn eqeq(&mut self, v1: &VirtReg, v2: &VirtReg) {
+	self.text_output.push(format!(
+            "mov -{}(%rsp), %rax",
+            self.var_table.get(v1).unwrap()
+        ));
+        self.text_output.push(format!(
+            "mov -{}(%rsp), %rbx",
+            self.var_table.get(v2).unwrap()
+        ));
+        self.text_output.push("cmp %rbx, %rax".to_string());
+	self.text_output.push("sete %al".to_string()); // Set al to 1 if equal, 0 otherwise
+	self.text_output.push("movzx %al, %rax".to_string()); // Copy al to rax
     }
 }
