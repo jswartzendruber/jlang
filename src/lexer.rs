@@ -116,15 +116,15 @@ impl Tokens {
         if self.current().ttype == ttype {
             self.advance();
         } else {
-	    println!(
-		"Error: Expected '{:?}', got '{}' on line {}.",
-		ttype,
-		self.current().copy_contents(file_contents).trim(),
-		self.current().from_line
-	    );
-	    println!("  {}", self.current().copy_line(file_contents));
-	    println!();
-	    std::process::exit(1);
+            println!(
+                "Error: Expected '{:?}', got '{}' on line {}.",
+                ttype,
+                self.current().copy_contents(file_contents).trim(),
+                self.current().from_line
+            );
+            println!("  {}", self.current().copy_line(file_contents));
+            println!();
+            std::process::exit(1);
         }
     }
 }

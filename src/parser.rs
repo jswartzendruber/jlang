@@ -120,9 +120,9 @@ impl FunctionCall {
 
 impl fmt::Display for FunctionCall {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
+        writeln!(
             f,
-            "{}( {:#?} ) Stack: {}\n",
+            "{}( {:#?} ) Stack: {}",
             self.name, self.args, self.stack_bytes_needed
         )
     }
@@ -130,9 +130,9 @@ impl fmt::Display for FunctionCall {
 
 #[derive(Debug)]
 pub struct If {
-    condition: Expression,
-    if_true: Vec<Statement>,
-    if_false: Option<Vec<Statement>>,
+    pub condition: Expression,
+    pub if_true: Vec<Statement>,
+    pub if_false: Option<Vec<Statement>>,
 }
 
 impl If {
@@ -298,7 +298,7 @@ impl Parser {
         if curr_token.copy_contents(&self.file_contents) == "if" {
             tokens.expect(TType::Identifier, &self.file_contents);
         } else {
-	    self.error(&curr_token, "identifier");
+            self.error(curr_token, "identifier");
         }
 
         let condition = self.parse_expression(tokens, 0);
@@ -343,12 +343,12 @@ impl Parser {
     }
 
     fn parse_arguments(&mut self, tokens: &mut Tokens) -> (Vec<Argument>, usize) {
-	let mut args = vec![];
-	let mut bytes = 0;
+        let mut args = vec![];
+        let mut bytes = 0;
 
-	self.parse_argument(tokens, &mut args, &mut bytes);
+        self.parse_argument(tokens, &mut args, &mut bytes);
 
-	(args, bytes)
+        (args, bytes)
     }
 
     fn parse_argument(&mut self, tokens: &mut Tokens, args: &mut Vec<Argument>, bytes: &mut usize) {
@@ -359,30 +359,30 @@ impl Parser {
                 let arg = Argument::String(curr.copy_contents(&self.file_contents));
                 tokens.advance();
 
-		if tokens.current().ttype == TType::Comma {
-		    tokens.expect(TType::Comma, &self.file_contents);
-		    self.parse_argument(tokens, args, bytes);
-		}
+                if tokens.current().ttype == TType::Comma {
+                    tokens.expect(TType::Comma, &self.file_contents);
+                    self.parse_argument(tokens, args, bytes);
+                }
 
-		args.push(arg);
-		*bytes += 16; // char* = 8, length = 8
+                args.push(arg);
+                *bytes += 16; // char* = 8, length = 8
             }
             TType::Number | TType::LParen => {
                 let expr = self.parse_expression(tokens, 0);
                 let count = Expression::count_nodes(&expr) * 8;
 
-		if tokens.current().ttype == TType::Comma {
-		    tokens.expect(TType::Comma, &self.file_contents);
-		    self.parse_argument(tokens, args, bytes);
-		}
+                if tokens.current().ttype == TType::Comma {
+                    tokens.expect(TType::Comma, &self.file_contents);
+                    self.parse_argument(tokens, args, bytes);
+                }
 
-		args.push(Argument::Expression(expr));
-		*bytes += count;
+                args.push(Argument::Expression(expr));
+                *bytes += count;
             }
             _ => {
-		self.error(&curr, "argument");
-		unreachable!();
-	    }
+                self.error(curr, "argument");
+                unreachable!();
+            }
         };
     }
 
@@ -399,8 +399,8 @@ impl Parser {
                 lhs
             }
             _ => {
-		self.error(lhs_token, "token in expression");
-		unreachable!();
+                self.error(lhs_token, "token in expression");
+                unreachable!();
             }
         };
 
@@ -434,15 +434,15 @@ impl Parser {
     }
 
     fn error(&self, token: &Token, thing: &str) {
-	println!(
-	    "Error: Unexpected {} '{}' on line {}.",
-	    thing,
+        println!(
+            "Error: Unexpected {} '{}' on line {}.",
+            thing,
             token.copy_contents(&self.file_contents).trim(),
-	    token.from_line
-	);
-	println!("  {}", token.copy_line(&self.file_contents).trim());
-	println!();
-	std::process::exit(1);
+            token.from_line
+        );
+        println!("  {}", token.copy_line(&self.file_contents).trim());
+        println!();
+        std::process::exit(1);
     }
 }
 

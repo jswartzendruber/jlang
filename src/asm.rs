@@ -32,8 +32,8 @@ impl Rsp {
 }
 
 pub struct Asm {
-    pub data_output: Vec<String>,
     pub text_output: Vec<String>,
+    pub data_output: Vec<String>,
     var_table: HashMap<VirtReg, usize>, // Register to stack offset
     rsp: Rsp,
 }
@@ -41,31 +41,21 @@ pub struct Asm {
 impl Asm {
     pub fn generate(tac: &mut Tac) -> Self {
         let mut asm = Self {
-            data_output: vec![],
             text_output: vec![],
+            data_output: vec![],
             var_table: HashMap::new(),
             rsp: Rsp::new(),
         };
 
         asm.text_output.push(".global _start".to_string());
 
-        for literal in &tac.large_literals {
-            match literal {
-                TacLiteral::String { virt_reg, value } => {
-                    asm.data_output.push(format!("._t{}:", virt_reg.id));
-                    asm.data_output.push(format!(".ascii \"{}\"", value));
-                    // asm.var_table.insert(*virt_reg, literal.clone());
-                }
-            };
-        }
-
         for tacv in &tac.code {
             match tacv {
-                TacValue::Label { name } => {
-                    if name == "main" {
+                TacValue::Label(l) => {
+                    if l.name == "main" {
                         asm.text_output.push("_start:".to_string());
                     } else {
-                        asm.text_output.push(format!("_{}:", name));
+                        asm.text_output.push(format!("{}:", l));
                     }
                 }
                 TacValue::BeginFunction { stack_bytes_needed } => {
@@ -78,41 +68,18 @@ impl Asm {
                         .push(format!("add ${}, %rsp", asm.rsp.func_begin));
                     asm.rsp.end();
                 }
-                TacValue::Double { target, .. } => {
+                TacValue::Double(d) => {
                     // TODO: Support immediates that are larger than 32 bits
                     let offset = asm.rsp.push(8);
-                    asm.var_table.insert(*target, offset);
+                    asm.var_table.insert(d.target, offset);
                     asm.text_output.push(format!(
                         "movq ${}, -{}(%rsp)",
-                        tac.var_locations.get(target).unwrap(),
+                        tac.var_locations.get(&d.target).unwrap(),
                         offset
                     ));
                 }
-                TacValue::Quad { target, v1, op, v2 } => {
-                    let offset = asm.rsp.push(8);
-                    match op {
-                        Operation::Add => {
-                            asm.add(v1, v2);
-                            asm.text_output.push(format!("mov %rax, -{}(%rsp)", offset));
-                        }
-                        Operation::Sub => {
-                            asm.sub(v1, v2);
-                            asm.text_output.push(format!("mov %rax, -{}(%rsp)", offset));
-                        }
-                        Operation::Mul => {
-                            asm.mul(v1, v2);
-                            asm.text_output.push(format!("mov %rax, -{}(%rsp)", offset));
-                        }
-                        Operation::Div => {
-                            asm.div(v1, v2);
-                            asm.text_output.push(format!("mov %rax, -{}(%rsp)", offset));
-                        }
-                        Operation::EqEq => {
-                            asm.eqeq(v1, v2);
-                            asm.text_output.push(format!("mov %rax, -{}(%rsp)", offset));
-                        }
-                    };
-                    asm.var_table.insert(*target, offset);
+                TacValue::Quad(q) => {
+                    asm.generate_quad(q);
                 }
                 TacValue::PushVirtReg { virt_reg, arg_num } => {
                     let offset = asm.var_table.get(virt_reg).unwrap();
@@ -122,10 +89,10 @@ impl Asm {
                         _ => todo!(),
                     }
                 }
-                TacValue::PushDefinedByte { virt_reg, arg_num } => {
+                TacValue::PushDefinedByte { label, arg_num } => {
                     let offset = asm.rsp.push(8);
                     asm.text_output
-                        .push(format!("lea ._t{}(%rip), %r10", virt_reg.id));
+                        .push(format!("lea .L{}(%rip), %r10", label.name));
                     asm.text_output
                         .push(format!("movq %r10, -{}(%rsp)", offset));
                     match arg_num {
@@ -155,6 +122,16 @@ impl Asm {
                         asm.text_output.push(format!("call _{}", func_name));
                     }
                 }
+                TacValue::DefineStringLiteral { label, value } => {
+                    asm.data_output.push(format!(".L{}:", label.name.clone()));
+                    asm.data_output.push(format!(".ascii \"{}\"", value));
+                }
+                TacValue::IfZero { virt_reg, goto } => {
+                    asm.text_output.push(format!("jz {}", goto.dest));
+                }
+                TacValue::Goto(g) => {
+                    asm.text_output.push(format!("jmp {}", g.dest));
+                }
             }
         }
 
@@ -163,6 +140,38 @@ impl Asm {
         asm.text_output.push("syscall".to_string());
 
         asm
+    }
+
+    pub fn generate_quad(&mut self, q: &Quad) {
+        let offset = self.rsp.push(8);
+        match q.op {
+            Operation::Add => {
+                self.add(&q.v1, &q.v2);
+                self.text_output
+                    .push(format!("mov %rax, -{}(%rsp)", offset));
+            }
+            Operation::Sub => {
+                self.sub(&q.v1, &q.v2);
+                self.text_output
+                    .push(format!("mov %rax, -{}(%rsp)", offset));
+            }
+            Operation::Mul => {
+                self.mul(&q.v1, &q.v2);
+                self.text_output
+                    .push(format!("mov %rax, -{}(%rsp)", offset));
+            }
+            Operation::Div => {
+                self.div(&q.v1, &q.v2);
+                self.text_output
+                    .push(format!("mov %rax, -{}(%rsp)", offset));
+            }
+            Operation::EqEq => {
+                self.eqeq(&q.v1, &q.v2);
+                self.text_output
+                    .push(format!("mov %rax, -{}(%rsp)", offset));
+            }
+        };
+        self.var_table.insert(q.target, offset);
     }
 
     pub fn add(&mut self, v1: &VirtReg, v2: &VirtReg) {

@@ -25,34 +25,42 @@ fn main() {
         .expect("Failed to read file");
 
     let mut lexer = Lexer::lex(contents);
+    println!("Lexer:");
+    println!("-=------------=-");
     for token in &lexer.tokens.tokens {
         println!("{}", token.display(&lexer.file_contents));
     }
+    println!("-=------------=-");
     println!();
 
     let mut parser = Parser::parse(&mut lexer);
+    println!("Parser:");
+    println!("-=------------=-");
     println!("{}", parser.ast);
+    println!("-=------------=-");
+    println!();
 
     // typecheck here?
 
     let mut tac = Tac::generate(&mut parser);
-    for line in &tac.large_literals {
-        println!("{}", line);
-    }
-    println!();
+    println!("TAC:");
+    println!("-=------------=-");
     for line in &tac.code {
         println!("{}", line);
     }
+    println!("-=------------=-");
     println!();
 
     let asm = Asm::generate(&mut tac);
+    println!("ASM:");
+    println!("-=------------=-");
     for line in &asm.data_output {
         println!("{}", line);
     }
-    println!();
     for line in &asm.text_output {
         println!("{}", line);
     }
+    println!("-=------------=-");
 
     let mut file = File::create("../out.asm").unwrap();
     for line in &asm.data_output {

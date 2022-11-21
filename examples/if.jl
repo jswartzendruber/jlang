@@ -1,7 +1,11 @@
 main :: () {
      if 1 == 1 {
-          print_string("yep\n");
+     	if 2 == 3 {
+	     	print_int(1);
+	} else {
+	  print_int(3);
+	}
      } else {
-          print_string("nope\n");
+       print_int(2);
      }
 }
