@@ -167,6 +167,7 @@ impl Tac {
 
     fn generate_statement(&mut self, statement: &Statement) {
         match statement {
+            Statement::VarDeclaration(_) => todo!(),
             Statement::FunctionCall(fc) => {
                 self.code.push(TacValue::BeginFunction {
                     stack_bytes_needed: fc.stack_bytes_needed,
@@ -242,24 +243,27 @@ impl Tac {
         let virt_reg = self.new_virt_reg();
 
         match &expr.value {
+            ExpressionValue::Variable { name } => todo!(),
             ExpressionValue::I64(i) => {
                 self.generate_immediate(VirtRegArg::Immediate(*i), virt_reg);
             }
             ExpressionValue::Operation(o) => {
-                let t1 = match expr.left.as_ref().unwrap().value {
+                let t1 = match &expr.left.as_ref().unwrap().value {
+                    ExpressionValue::Variable { name } => todo!(),
                     ExpressionValue::I64(i) => {
                         let vr = self.new_virt_reg();
-                        self.generate_immediate(VirtRegArg::Immediate(i), vr)
+                        self.generate_immediate(VirtRegArg::Immediate(*i), vr)
                     }
                     ExpressionValue::Operation(_) => {
                         self.generate_expression(expr.left.as_ref().unwrap())
                     }
                 };
 
-                let t2 = match expr.right.as_ref().unwrap().value {
+                let t2 = match &expr.right.as_ref().unwrap().value {
+                    ExpressionValue::Variable { name } => todo!(),
                     ExpressionValue::I64(i) => {
                         let vr = self.new_virt_reg();
-                        self.generate_immediate(VirtRegArg::Immediate(i), vr)
+                        self.generate_immediate(VirtRegArg::Immediate(*i), vr)
                     }
                     ExpressionValue::Operation(_) => {
                         self.generate_expression(expr.right.as_ref().unwrap())

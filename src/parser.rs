@@ -1,7 +1,8 @@
 use crate::lexer::*;
 use std::fmt;
 
-enum Type {
+#[derive(Debug)]
+pub enum Type {
     I64,
     Void,
     String,
@@ -13,6 +14,15 @@ impl fmt::Display for Type {
             Type::I64 => write!(f, "i64"),
             Type::Void => write!(f, "Void"),
             Type::String => write!(f, "String"),
+        }
+    }
+}
+
+impl Type {
+    fn from(t: &str) -> Self {
+        match t {
+            "i64" => Type::I64,
+            _ => unimplemented!(),
         }
     }
 }
@@ -59,6 +69,7 @@ impl Operation {
 
 #[derive(Debug, Clone)]
 pub enum ExpressionValue {
+    Variable { name: String },
     Operation(Operation),
     I64(i64),
 }
@@ -160,7 +171,31 @@ impl fmt::Display for If {
 }
 
 #[derive(Debug)]
+pub struct VarDeclaration {
+    var_type: Type,
+    value: Expression,
+    name: String,
+}
+
+impl VarDeclaration {
+    pub fn new(var_type: Type, value: Expression, name: String) -> Self {
+        Self {
+            var_type,
+            value,
+            name,
+        }
+    }
+}
+
+impl fmt::Display for VarDeclaration {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "let {}: {} = {:?}", self.name, self.var_type, self.value)
+    }
+}
+
+#[derive(Debug)]
 pub enum Statement {
+    VarDeclaration(VarDeclaration),
     FunctionCall(FunctionCall),
     If(If),
 }
@@ -168,6 +203,7 @@ pub enum Statement {
 impl fmt::Display for Statement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            Statement::VarDeclaration(v) => write!(f, "{}", v),
             Statement::FunctionCall(fc) => write!(f, "{}", fc),
             Statement::If(i) => write!(f, "{}", i),
         }
@@ -287,10 +323,44 @@ impl Parser {
     }
 
     fn parse_statement(&mut self, tokens: &mut Tokens) -> Statement {
-        match tokens.peek().expect("Expected statement").ttype {
+        let curr_token = tokens.current();
+        let next_token = tokens.peek().expect("Expected statement");
+        match next_token.ttype {
             TType::LParen => Statement::FunctionCall(self.parse_function_call(tokens)),
-            _ => Statement::If(self.parse_if_statement(tokens)),
+            TType::Identifier => {
+                let curr_contents = curr_token.copy_contents(&self.file_contents);
+                if curr_contents == "if" {
+                    Statement::If(self.parse_if_statement(tokens))
+                } else if curr_contents == "let" {
+                    Statement::VarDeclaration(self.parse_var_declaration(tokens))
+                } else {
+                    unimplemented!();
+                }
+            }
+            _ => unimplemented!(),
         }
+    }
+
+    fn parse_var_declaration(&mut self, tokens: &mut Tokens) -> VarDeclaration {
+        tokens.expect(TType::Identifier, &self.file_contents); // let
+        let var_name = tokens
+            .advance()
+            .expect("Expected variable name")
+            .copy_contents(&self.file_contents);
+        tokens.expect(TType::Colon, &self.file_contents);
+
+        let var_type = Type::from(
+            &tokens
+                .advance()
+                .expect("Expected variable type")
+                .copy_contents(&self.file_contents),
+        );
+        tokens.expect(TType::Equal, &self.file_contents);
+
+        let var_value = self.parse_expression(tokens, 0);
+        tokens.expect(TType::Semicolon, &self.file_contents);
+
+        VarDeclaration::new(var_type, var_value, var_name)
     }
 
     fn parse_if_statement(&mut self, tokens: &mut Tokens) -> If {
@@ -367,7 +437,7 @@ impl Parser {
                 args.push(arg);
                 *bytes += 16; // char* = 8, length = 8
             }
-            TType::Number | TType::LParen => {
+            TType::Number | TType::Identifier | TType::LParen => {
                 let expr = self.parse_expression(tokens, 0);
                 let count = Expression::count_nodes(&expr) * 8;
 
@@ -397,6 +467,10 @@ impl Parser {
                 let lhs = self.parse_expression(tokens, 0);
                 tokens.expect(TType::RParen, &self.file_contents);
                 lhs
+            }
+            TType::Identifier => {
+                let string_value = lhs_token.copy_contents(&self.file_contents);
+                Expression::new_leaf(ExpressionValue::Variable { name: string_value })
             }
             _ => {
                 self.error(lhs_token, "token in expression");

@@ -14,6 +14,7 @@ pub enum TType {
     RCurly,
     LCurly,
     String,
+    Equal,
     Arrow,
     Colon,
     Comma,
@@ -221,7 +222,8 @@ impl Lexer {
                         .push(lexer.add_token(TType::EqualEqual, 2));
                     lexer.curr_idx += 2;
                 } else {
-                    todo!();
+                    lexer.tokens.tokens.push(lexer.add_token(TType::Equal, 1));
+                    lexer.curr_idx += 1;
                 }
             } else if c == '|' {
                 if lexer.curr_idx + 1 < len && bytes[lexer.curr_idx + 1] == b'|' {
