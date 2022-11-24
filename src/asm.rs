@@ -72,11 +72,11 @@ impl Asm {
                     // TODO: Support immediates that are larger than 32 bits
                     let offset = asm.rsp.push(8);
                     asm.var_table.insert(d.target, offset);
-                    asm.text_output.push(format!(
-                        "movq ${}, -{}(%rsp)",
-                        tac.var_locations.get(&d.target).unwrap(),
-                        offset
-                    ));
+		    asm.text_output.push(format!(
+			"movq ${}, -{}(%rsp)",
+			tac.var_locations.get(&d.target).unwrap(),
+			offset
+		    ));
                 }
                 TacValue::Quad(q) => {
                     asm.generate_quad(q);
@@ -176,48 +176,48 @@ impl Asm {
 
     pub fn add(&mut self, v1: &VirtReg, v2: &VirtReg) {
         self.text_output.push(format!(
-            "mov -{}(%rsp), %rax",
-            self.var_table.get(v1).unwrap()
+            "mov {}(%rsp), %rax",
+            -(*self.var_table.get(v1).unwrap() as i32) + self.rsp.func_begin as i32
         ));
         self.text_output.push(format!(
-            "mov -{}(%rsp), %rbx",
-            self.var_table.get(v2).unwrap()
+            "mov {}(%rsp), %rbx",
+            -(*self.var_table.get(v2).unwrap() as i32) + self.rsp.func_begin as i32
         ));
         self.text_output.push("add %rbx, %rax".to_string());
     }
 
     pub fn sub(&mut self, v1: &VirtReg, v2: &VirtReg) {
         self.text_output.push(format!(
-            "mov -{}(%rsp), %rax",
-            self.var_table.get(v1).unwrap()
+            "mov {}(%rsp), %rax",
+            -(*self.var_table.get(v1).unwrap() as i32) + self.rsp.func_begin as i32
         ));
         self.text_output.push(format!(
-            "mov -{}(%rsp), %rbx",
-            self.var_table.get(v2).unwrap()
+            "mov {}(%rsp), %rbx",
+            -(*self.var_table.get(v2).unwrap() as i32) + self.rsp.func_begin as i32
         ));
         self.text_output.push("sub %rbx, %rax".to_string());
     }
 
     pub fn mul(&mut self, v1: &VirtReg, v2: &VirtReg) {
         self.text_output.push(format!(
-            "mov -{}(%rsp), %rax",
-            self.var_table.get(v1).unwrap()
+            "mov {}(%rsp), %rax",
+            -(*self.var_table.get(v1).unwrap() as i32) + self.rsp.func_begin as i32
         ));
         self.text_output.push(format!(
-            "mov -{}(%rsp), %rbx",
-            self.var_table.get(v2).unwrap()
+            "mov {}(%rsp), %rbx",
+            -(*self.var_table.get(v2).unwrap() as i32) + self.rsp.func_begin as i32
         ));
         self.text_output.push("imul %rbx, %rax".to_string());
     }
 
     pub fn div(&mut self, v1: &VirtReg, v2: &VirtReg) {
         self.text_output.push(format!(
-            "mov -{}(%rsp), %rax",
-            self.var_table.get(v1).unwrap()
+            "mov {}(%rsp), %rax",
+            -(*self.var_table.get(v1).unwrap() as i32) + self.rsp.func_begin as i32
         ));
         self.text_output.push(format!(
-            "mov -{}(%rsp), %rbx", // Divisor
-            self.var_table.get(v2).unwrap()
+            "mov {}(%rsp), %rbx", // Divisor
+            -(*self.var_table.get(v2).unwrap() as i32) + self.rsp.func_begin as i32
         ));
         self.text_output.push("mov $0, %rdx".to_string()); // Clear high bits of dividend
         self.text_output.push("cqto".to_string()); // Sign extend rax to rdx:rax
@@ -226,12 +226,12 @@ impl Asm {
 
     pub fn eqeq(&mut self, v1: &VirtReg, v2: &VirtReg) {
         self.text_output.push(format!(
-            "mov -{}(%rsp), %rax",
-            self.var_table.get(v1).unwrap()
+            "mov {}(%rsp), %rax",
+            -(*self.var_table.get(v1).unwrap() as i32) + self.rsp.func_begin as i32
         ));
         self.text_output.push(format!(
-            "mov -{}(%rsp), %rbx",
-            self.var_table.get(v2).unwrap()
+            "mov {}(%rsp), %rbx",
+            -(*self.var_table.get(v2).unwrap() as i32) + self.rsp.func_begin as i32
         ));
         self.text_output.push("cmp %rbx, %rax".to_string());
         self.text_output.push("sete %al".to_string()); // Set al to 1 if equal, 0 otherwise

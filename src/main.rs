@@ -1,9 +1,9 @@
-mod asm;
+// mod asm;
 mod lexer;
 mod parser;
 mod tac;
 
-use asm::*;
+// use asm::*;
 use lexer::*;
 use parser::*;
 use std::env;
@@ -51,58 +51,59 @@ fn main() {
     println!("-=------------=-");
     println!();
 
-    let asm = Asm::generate(&mut tac);
-    println!("ASM:");
-    println!("-=------------=-");
-    for line in &asm.data_output {
-        println!("{}", line);
-    }
-    for line in &asm.text_output {
-        println!("{}", line);
-    }
-    println!("-=------------=-");
+    // Codegen is frozen for now. Focusing on intermediate representation.
+    // let asm = Asm::generate(&mut tac);
+    // println!("ASM:");
+    // println!("-=------------=-");
+    // for line in &asm.data_output {
+    //     println!("{}", line);
+    // }
+    // for line in &asm.text_output {
+    //     println!("{}", line);
+    // }
+    // println!("-=------------=-");
 
-    let mut file = File::create("../out.asm").unwrap();
-    for line in &asm.data_output {
-        file.write_all(line.as_bytes())
-            .expect("Failed to write assembly to file");
-        file.write_all(b"\n")
-            .expect("Failed to write assembly to file");
-    }
-    for line in &asm.text_output {
-        file.write_all(line.as_bytes())
-            .expect("Failed to write assembly to file");
-        file.write_all(b"\n")
-            .expect("Failed to write assembly to file");
-    }
+    // let mut file = File::create("../out.asm").unwrap();
+    // for line in &asm.data_output {
+    //     file.write_all(line.as_bytes())
+    //         .expect("Failed to write assembly to file");
+    //     file.write_all(b"\n")
+    //         .expect("Failed to write assembly to file");
+    // }
+    // for line in &asm.text_output {
+    //     file.write_all(line.as_bytes())
+    //         .expect("Failed to write assembly to file");
+    //     file.write_all(b"\n")
+    //         .expect("Failed to write assembly to file");
+    // }
 
-    Command::new("as")
-        .arg("../out.asm")
-        .arg("-o")
-        .arg("../out.o")
-        .output()
-        .expect("Error assembling code.");
-    Command::new("as")
-        .arg("../io.asm")
-        .arg("-o")
-        .arg("../io.o")
-        .output()
-        .expect("Error assembling lib.");
-    Command::new("ld")
-        .arg("-m")
-        .arg("elf_x86_64")
-        .arg("../out.o")
-        .arg("../io.o")
-        .arg("-o")
-        .arg("../a.out")
-        .output()
-        .expect("Error linking code");
-    let result = Command::new("./../a.out")
-        .output()
-        .expect("Error running code");
-    println!();
-    println!("Program results:");
-    println!("-=------------=-");
-    print!("{}", String::from_utf8(result.stdout).unwrap());
-    println!("-=------------=-");
+    // Command::new("as")
+    //     .arg("../out.asm")
+    //     .arg("-o")
+    //     .arg("../out.o")
+    //     .output()
+    //     .expect("Error assembling code.");
+    // Command::new("as")
+    //     .arg("../io.asm")
+    //     .arg("-o")
+    //     .arg("../io.o")
+    //     .output()
+    //     .expect("Error assembling lib.");
+    // Command::new("ld")
+    //     .arg("-m")
+    //     .arg("elf_x86_64")
+    //     .arg("../out.o")
+    //     .arg("../io.o")
+    //     .arg("-o")
+    //     .arg("../a.out")
+    //     .output()
+    //     .expect("Error linking code");
+    // let result = Command::new("./../a.out")
+    //     .output()
+    //     .expect("Error running code");
+    // println!();
+    // println!("Program results:");
+    // println!("-=------------=-");
+    // print!("{}", String::from_utf8(result.stdout).unwrap());
+    // println!("-=------------=-");
 }

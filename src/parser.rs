@@ -1,7 +1,7 @@
 use crate::lexer::*;
+use std::collections::HashMap;
 use std::fmt;
 
-#[derive(Debug)]
 pub enum Type {
     I64,
     Void,
@@ -27,10 +27,22 @@ impl Type {
     }
 }
 
-#[derive(Debug)]
 pub enum Argument {
     Expression(Expression),
     String(String),
+}
+
+impl fmt::Display for Argument {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Argument::Expression(e) => {
+                write!(f, "{}", e)
+            }
+            Argument::String(s) => {
+                write!(f, "\"{}\"", s)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -67,11 +79,44 @@ impl Operation {
     }
 }
 
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub struct Variable {
+    pub name: String,
+}
+
+impl Variable {
+    pub fn new(name: String) -> Self {
+        Self { name }
+    }
+}
+
+impl fmt::Display for Variable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum ExpressionValue {
-    Variable { name: String },
     Operation(Operation),
+    Variable(Variable),
     I64(i64),
+}
+
+impl fmt::Display for ExpressionValue {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ExpressionValue::Operation(o) => {
+                write!(f, "{}", o)
+            }
+            ExpressionValue::Variable(v) => {
+                write!(f, "{}", v)
+            }
+            ExpressionValue::I64(i) => {
+                write!(f, "{}", i)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -112,7 +157,22 @@ impl Expression {
     }
 }
 
-#[derive(Debug)]
+impl fmt::Display for Expression {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.left.is_some() && self.right.is_some() {
+            write!(
+                f,
+                "({} {} {})",
+                self.left.as_ref().unwrap(),
+                self.value,
+                self.right.as_ref().unwrap()
+            )
+        } else {
+            write!(f, "{}", self.value)
+        }
+    }
+}
+
 pub struct FunctionCall {
     pub name: String,
     pub args: Vec<Argument>,
@@ -131,15 +191,14 @@ impl FunctionCall {
 
 impl fmt::Display for FunctionCall {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(
-            f,
-            "{}( {:#?} ) Stack: {}",
-            self.name, self.args, self.stack_bytes_needed
-        )
+        write!(f, "{}( ", self.name).expect("Failed to write");
+        self.args
+            .iter()
+            .for_each(|ref arg| write!(f, "{}", arg).expect("Failed to write"));
+        writeln!(f, " ) Stack: {}", self.stack_bytes_needed)
     }
 }
 
-#[derive(Debug)]
 pub struct If {
     pub condition: Expression,
     pub if_true: Vec<Statement>,
@@ -162,19 +221,27 @@ impl If {
 
 impl fmt::Display for If {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "If ( {:?} ) {{\n  {:?}\n}}\nelse {{\n  {:?}\n}}\n",
-            self.condition, self.if_true, self.if_false
-        )
+        writeln!(f, "If ( {} ) {{", self.condition,).expect("Failed to write");
+        self.if_true
+            .iter()
+            .for_each(|ref stmt| write!(f, "{}", stmt).expect("Failed to write"));
+        write!(f, "}} ").expect("Failed to write");
+        writeln!(f, "else {{").expect("Failed to write");
+        if self.if_false.is_some() {
+            self.if_false
+                .as_ref()
+                .unwrap()
+                .iter()
+                .for_each(|ref stmt| write!(f, "{}", stmt).expect("Failed to write"));
+        }
+        writeln!(f, "}}")
     }
 }
 
-#[derive(Debug)]
 pub struct VarDeclaration {
-    var_type: Type,
-    value: Expression,
-    name: String,
+    pub var_type: Type,
+    pub value: Expression,
+    pub name: String,
 }
 
 impl VarDeclaration {
@@ -189,11 +256,10 @@ impl VarDeclaration {
 
 impl fmt::Display for VarDeclaration {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "let {}: {} = {:?}", self.name, self.var_type, self.value)
+        writeln!(f, "let {}: {} = {}", self.name, self.var_type, self.value)
     }
 }
 
-#[derive(Debug)]
 pub enum Statement {
     VarDeclaration(VarDeclaration),
     FunctionCall(FunctionCall),
@@ -228,13 +294,26 @@ impl Function {
     }
 }
 
+#[derive(Debug)]
+pub struct Scope {
+    pub table: HashMap<String, Expression>,
+}
+
+impl Scope {
+    fn new() -> Self {
+        Self {
+            table: HashMap::new(),
+        }
+    }
+}
+
 impl fmt::Display for Function {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}( {:?} ) -> {}\n{{\n",
-            self.name, self.args, self.return_type
-        )?;
+        write!(f, "{}( ", self.name,)?;
+        self.args
+            .iter()
+            .for_each(|ref arg| write!(f, "{}", arg).expect("Failed to write"));
+        write!(f, " ) -> {}\n{{\n", self.return_type)?;
         for statement in &self.body {
             write!(f, "{}", statement)?;
         }
@@ -269,6 +348,7 @@ impl fmt::Display for Ast {
 pub struct Parser {
     file_contents: String,
     pub ast: Ast,
+    pub scope: Vec<Scope>, // stack
 }
 
 impl Parser {
@@ -282,7 +362,41 @@ impl Parser {
                 Box::new(None),
                 Box::new(None),
             ),
+            scope: vec![],
         }
+    }
+
+    fn enter_scope(&mut self) {
+        self.scope.push(Scope::new());
+        println!("enter {:#?}", self.scope);
+    }
+
+    fn leave_scope(&mut self) {
+        println!("leave {:#?}", self.scope);
+        self.scope.pop();
+    }
+
+    // Traverse scope from most recent to least, and return var if found.
+    fn get_scoped_var(&self, var: &str) -> Option<&Expression> {
+        for scope in self.scope.iter() {
+            let elem = scope.table.get(var);
+            if elem.is_some() {
+                return elem;
+            }
+        }
+
+        None
+    }
+
+    // Insert var in most recent scope. Return false if a var with that name exists.
+    fn insert_scoped_var(&mut self, var: &str, expr: Expression) -> bool {
+        let elem = self
+            .scope
+            .last_mut()
+            .unwrap()
+            .table
+            .insert(var.to_string(), expr);
+	elem.is_none()
     }
 
     pub fn parse(lexer: &mut Lexer) -> Self {
@@ -310,6 +424,7 @@ impl Parser {
 
         tokens.expect(TType::RParen, &self.file_contents);
         tokens.expect(TType::LCurly, &self.file_contents);
+        self.enter_scope();
 
         // Collect statements until end of function
         let mut statements = vec![];
@@ -317,8 +432,8 @@ impl Parser {
             statements.push(self.parse_statement(tokens));
         }
 
+        self.leave_scope();
         tokens.expect(TType::RCurly, &self.file_contents);
-
         Node::Function(Function::new(func_name, vec![], statements, Type::Void))
     }
 
@@ -337,6 +452,7 @@ impl Parser {
                     unimplemented!();
                 }
             }
+            TType::Number => Statement::If(self.parse_if_statement(tokens)),
             _ => unimplemented!(),
         }
     }
@@ -360,6 +476,8 @@ impl Parser {
         let var_value = self.parse_expression(tokens, 0);
         tokens.expect(TType::Semicolon, &self.file_contents);
 
+        self.insert_scoped_var(&var_name, var_value.clone());
+
         VarDeclaration::new(var_type, var_value, var_name)
     }
 
@@ -373,9 +491,12 @@ impl Parser {
 
         let condition = self.parse_expression(tokens, 0);
         tokens.expect(TType::LCurly, &self.file_contents);
+        self.enter_scope();
 
         // TODO: Handle arbitrary number of statements
         let if_true = vec![self.parse_statement(tokens)];
+
+        self.leave_scope();
         tokens.expect(TType::RCurly, &self.file_contents);
 
         curr_token = tokens.current();
@@ -384,7 +505,9 @@ impl Parser {
             let mut v = vec![];
 
             tokens.expect(TType::LCurly, &self.file_contents);
+            self.enter_scope();
             v.push(self.parse_statement(tokens));
+            self.leave_scope();
             tokens.expect(TType::RCurly, &self.file_contents);
 
             Some(v)
@@ -470,7 +593,7 @@ impl Parser {
             }
             TType::Identifier => {
                 let string_value = lhs_token.copy_contents(&self.file_contents);
-                Expression::new_leaf(ExpressionValue::Variable { name: string_value })
+                Expression::new_leaf(ExpressionValue::Variable(Variable::new(string_value)))
             }
             _ => {
                 self.error(lhs_token, "token in expression");

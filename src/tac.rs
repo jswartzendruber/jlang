@@ -30,7 +30,7 @@ impl Label {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub enum VirtRegArg {
     Immediate(i64),
 }
@@ -131,6 +131,7 @@ pub struct Tac {
     pub code: Vec<TacValue>,
     curr_reg_id: usize,
     pub var_locations: HashMap<VirtReg, VirtRegArg>,
+    pub var_map: HashMap<String, VirtReg>,
 }
 
 impl Tac {
@@ -139,6 +140,7 @@ impl Tac {
             code: vec![],
             curr_reg_id: 0,
             var_locations: HashMap::new(),
+            var_map: HashMap::new(),
         }
     }
 
@@ -167,7 +169,15 @@ impl Tac {
 
     fn generate_statement(&mut self, statement: &Statement) {
         match statement {
-            Statement::VarDeclaration(_) => todo!(),
+            Statement::VarDeclaration(v) => match v.var_type {
+                Type::I64 => {
+                    let virt_reg = self.generate_expression(&v.value);
+                    self.var_map.insert(v.name.clone(), virt_reg);
+                }
+                _ => {
+                    unimplemented!();
+                }
+            },
             Statement::FunctionCall(fc) => {
                 self.code.push(TacValue::BeginFunction {
                     stack_bytes_needed: fc.stack_bytes_needed,
@@ -243,37 +253,18 @@ impl Tac {
         let virt_reg = self.new_virt_reg();
 
         match &expr.value {
-            ExpressionValue::Variable { name } => todo!(),
+            ExpressionValue::Variable(v) => {
+                todo!();
+            }
             ExpressionValue::I64(i) => {
                 self.generate_immediate(VirtRegArg::Immediate(*i), virt_reg);
+                self.var_locations
+                    .insert(virt_reg, VirtRegArg::Immediate(*i));
             }
             ExpressionValue::Operation(o) => {
-                let t1 = match &expr.left.as_ref().unwrap().value {
-                    ExpressionValue::Variable { name } => todo!(),
-                    ExpressionValue::I64(i) => {
-                        let vr = self.new_virt_reg();
-                        self.generate_immediate(VirtRegArg::Immediate(*i), vr)
-                    }
-                    ExpressionValue::Operation(_) => {
-                        self.generate_expression(expr.left.as_ref().unwrap())
-                    }
-                };
+                let t1 = self.generate_operation(expr.left.as_ref().unwrap());
+                let t2 = self.generate_operation(expr.right.as_ref().unwrap());
 
-                let t2 = match &expr.right.as_ref().unwrap().value {
-                    ExpressionValue::Variable { name } => todo!(),
-                    ExpressionValue::I64(i) => {
-                        let vr = self.new_virt_reg();
-                        self.generate_immediate(VirtRegArg::Immediate(*i), vr)
-                    }
-                    ExpressionValue::Operation(_) => {
-                        self.generate_expression(expr.right.as_ref().unwrap())
-                    }
-                };
-
-                // self.var_locations.insert(
-                //     virt_reg,
-                //     VirtRegArg::VirtReg(virt_reg), // wtf?
-                // );
                 self.code
                     .push(TacValue::Quad(Quad::new(virt_reg, t1, o.clone(), t2)));
             }
@@ -282,8 +273,19 @@ impl Tac {
         virt_reg
     }
 
+    fn generate_operation(&mut self, expr: &Expression) -> VirtReg {
+        match &expr.value {
+            ExpressionValue::Variable(v) => *self.var_map.get(&v.name).unwrap(),
+            ExpressionValue::I64(i) => {
+                let vr = self.new_virt_reg();
+                self.generate_immediate(VirtRegArg::Immediate(*i), vr)
+            }
+            ExpressionValue::Operation(_) => self.generate_expression(expr.right.as_ref().unwrap()),
+        }
+    }
+
     fn generate_immediate(&mut self, val: VirtRegArg, virt_reg: VirtReg) -> VirtReg {
-        self.var_locations.insert(virt_reg, val);
+        self.var_locations.insert(virt_reg, val.clone());
 
         match val {
             VirtRegArg::Immediate(i) => {
