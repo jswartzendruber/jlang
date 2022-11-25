@@ -1,6 +1,6 @@
 main :: () {
-     let a: i64 = 1;
-     let b: i64 = 2;
+     let a: i64 = 1 + 2;
+     let b: i64 = 2 + 4;
      print_int(a + b);
      print_string("\n");
      if a == b {

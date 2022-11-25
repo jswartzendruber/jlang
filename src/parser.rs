@@ -278,14 +278,16 @@ pub struct VarDeclaration {
     pub var_type: Type,
     pub value: Expression,
     pub name: String,
+    stack_bytes_needed: usize,
 }
 
 impl VarDeclaration {
-    pub fn new(var_type: Type, value: Expression, name: String) -> Self {
+    pub fn new(var_type: Type, value: Expression, name: String, stack_bytes_needed: usize) -> Self {
         Self {
             var_type,
             value,
             name,
+            stack_bytes_needed,
         }
     }
 }
@@ -312,20 +314,38 @@ impl fmt::Display for Statement {
     }
 }
 
+impl Statement {
+    fn stack_bytes_needed(&self) -> usize {
+        match self {
+            Statement::If(_) => unimplemented!(),
+            Statement::FunctionCall(_) => unimplemented!(),
+            Statement::VarDeclaration(v) => v.stack_bytes_needed,
+        }
+    }
+}
+
 pub struct Function {
     pub name: String,
     args: Vec<Argument>,
     pub body: Block,
     return_type: Type,
+    pub stack_bytes_needed: usize,
 }
 
 impl Function {
-    fn new(name: String, args: Vec<Argument>, body: Block, return_type: Type) -> Self {
+    fn new(
+        name: String,
+        args: Vec<Argument>,
+        body: Block,
+        return_type: Type,
+        stack_bytes_needed: usize,
+    ) -> Self {
         Self {
             name,
             args,
             body,
             return_type,
+            stack_bytes_needed,
         }
     }
 }
@@ -416,6 +436,7 @@ impl Parser {
                     vec![],
                     Block::new(vec![], Scope::new(Box::new(None))),
                     Type::Void,
+                    0,
                 )),
                 Box::new(None),
                 Box::new(None),
@@ -478,6 +499,11 @@ impl Parser {
         while tokens.current().ttype != TType::RCurly {
             statements.push(self.parse_statement(tokens));
         }
+        let stack_bytes_needed = statements
+            .iter()
+            .filter(|e| matches!(e, Statement::VarDeclaration(_)))
+            .map(|e| e.stack_bytes_needed())
+            .sum(); // Stack space needed for local function vars
 
         tokens.expect(TType::RCurly, &self.file_contents);
         Node::Function(Function::new(
@@ -485,6 +511,7 @@ impl Parser {
             vec![],
             Block::new(statements, self.leave_scope()),
             Type::Void,
+            stack_bytes_needed,
         ))
     }
 
@@ -523,10 +550,11 @@ impl Parser {
         tokens.expect(TType::Equal, &self.file_contents);
 
         let var_value = self.parse_expression(tokens, 0);
+        let stack_bytes_needed = Expression::count_nodes(&var_value) * 8;
         tokens.expect(TType::Semicolon, &self.file_contents);
 
         self.insert_scoped_var(&var_name, var_value.clone());
-        VarDeclaration::new(var_type, var_value, var_name)
+        VarDeclaration::new(var_type, var_value, var_name, stack_bytes_needed)
     }
 
     fn parse_if_statement(&mut self, tokens: &mut Tokens) -> If {
@@ -608,7 +636,6 @@ impl Parser {
             }
             TType::Number | TType::Identifier | TType::LParen => {
                 let expr = self.parse_expression(tokens, 0);
-                let count = Expression::count_nodes(&expr) * 8;
 
                 if tokens.current().ttype == TType::Comma {
                     tokens.expect(TType::Comma, &self.file_contents);
@@ -616,7 +643,7 @@ impl Parser {
                 }
 
                 args.push(Argument::Expression(expr));
-                *bytes += count;
+                *bytes += 8;
             }
             _ => {
                 self.error(curr, "argument");

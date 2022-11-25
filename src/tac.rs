@@ -160,11 +160,17 @@ impl Tac {
         self.code
             .push(TacValue::Label(Label::new(function.name.clone())));
 
+        self.code.push(TacValue::BeginFunction {
+            stack_bytes_needed: function.stack_bytes_needed,
+        });
+
         for statement in &function.body.statements {
             self.generate_statement(statement, &function.body.scope);
         }
 
         // TODO: Handle function return type
+
+        self.code.push(TacValue::EndFunction);
     }
 
     fn generate_statement(&mut self, statement: &Statement, scope: &Scope) {
