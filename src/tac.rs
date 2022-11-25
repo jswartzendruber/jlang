@@ -130,22 +130,22 @@ impl fmt::Display for TacValue {
 pub struct Tac {
     pub code: Vec<TacValue>,
     curr_reg_id: usize,
-    pub var_locations: HashMap<VirtReg, VirtRegArg>,
     pub var_map: HashMap<String, VirtReg>,
+    file_contents: String,
 }
 
 impl Tac {
-    fn new() -> Self {
+    fn new(file_contents: String) -> Self {
         Self {
             code: vec![],
             curr_reg_id: 0,
-            var_locations: HashMap::new(),
             var_map: HashMap::new(),
+            file_contents,
         }
     }
 
-    pub fn generate(parser: &mut Parser) -> Self {
-        let mut tac = Tac::new();
+    pub fn generate(parser: Parser) -> Self {
+        let mut tac = Tac::new(parser.file_contents);
 
         match &parser.ast.node {
             Node::Function(f) => tac.generate_function(f),
@@ -160,18 +160,18 @@ impl Tac {
         self.code
             .push(TacValue::Label(Label::new(function.name.clone())));
 
-        for statement in &function.body {
-            self.generate_statement(statement);
+        for statement in &function.body.statements {
+            self.generate_statement(statement, &function.body.scope);
         }
 
         // TODO: Handle function return type
     }
 
-    fn generate_statement(&mut self, statement: &Statement) {
+    fn generate_statement(&mut self, statement: &Statement, scope: &Scope) {
         match statement {
             Statement::VarDeclaration(v) => match v.var_type {
                 Type::I64 => {
-                    let virt_reg = self.generate_expression(&v.value);
+                    let virt_reg = self.generate_expression(&v.value, scope);
                     self.var_map.insert(v.name.clone(), virt_reg);
                 }
                 _ => {
@@ -188,7 +188,7 @@ impl Tac {
                     argc += 1;
                     match arg {
                         Argument::Expression(e) => {
-                            let expr_reg = self.generate_expression(e);
+                            let expr_reg = self.generate_expression(e, scope);
                             self.code.push(TacValue::PushVirtReg {
                                 virt_reg: expr_reg,
                                 arg_num: argc,
@@ -221,7 +221,7 @@ impl Tac {
                 self.code.push(TacValue::EndFunction);
             }
             Statement::If(i) => {
-                let condition_reg = self.generate_expression(&i.condition);
+                let condition_reg = self.generate_expression(&i.condition, scope);
                 let l1 = self.new_label();
                 let l2 = self.new_label();
 
@@ -231,9 +231,9 @@ impl Tac {
                 });
 
                 // If not equal do this part
-                if let Some(stmts) = &i.if_false {
-                    for stmt in stmts {
-                        self.generate_statement(stmt);
+                if let Some(block) = &i.if_false {
+                    for stmt in &block.statements {
+                        self.generate_statement(stmt, &block.scope);
                     }
                 }
                 // Jump over if not equal part
@@ -241,29 +241,41 @@ impl Tac {
                 self.code.push(TacValue::Label(l1));
 
                 // If equal do this part
-                for stmt in &i.if_true {
-                    self.generate_statement(stmt);
+                for stmt in &i.if_true.statements {
+                    self.generate_statement(stmt, &i.if_true.scope);
                 }
                 self.code.push(TacValue::Label(l2));
             }
         }
     }
 
-    fn generate_expression(&mut self, expr: &Expression) -> VirtReg {
+    fn generate_expression(&mut self, expr: &Expression, scope: &Scope) -> VirtReg {
         let virt_reg = self.new_virt_reg();
 
         match &expr.value {
             ExpressionValue::Variable(v) => {
-                todo!();
+                let var_expr = scope.get_scoped_var(&v.name);
+                match var_expr {
+                    Some(e) => {
+                        self.generate_expression(e, scope);
+                    }
+                    None => {
+                        println!(
+                            "Error: Variable '{}' on line {} is not in scope.",
+                            v.name, v.from_line
+                        );
+                        println!("  {}", v.copy_line(&self.file_contents).trim());
+                        println!();
+                        std::process::exit(1);
+                    }
+                }
             }
             ExpressionValue::I64(i) => {
                 self.generate_immediate(VirtRegArg::Immediate(*i), virt_reg);
-                self.var_locations
-                    .insert(virt_reg, VirtRegArg::Immediate(*i));
             }
             ExpressionValue::Operation(o) => {
-                let t1 = self.generate_operation(expr.left.as_ref().unwrap());
-                let t2 = self.generate_operation(expr.right.as_ref().unwrap());
+                let t1 = self.generate_operation(expr.left.as_ref().unwrap(), scope);
+                let t2 = self.generate_operation(expr.right.as_ref().unwrap(), scope);
 
                 self.code
                     .push(TacValue::Quad(Quad::new(virt_reg, t1, o.clone(), t2)));
@@ -273,20 +285,20 @@ impl Tac {
         virt_reg
     }
 
-    fn generate_operation(&mut self, expr: &Expression) -> VirtReg {
+    fn generate_operation(&mut self, expr: &Expression, scope: &Scope) -> VirtReg {
         match &expr.value {
             ExpressionValue::Variable(v) => *self.var_map.get(&v.name).unwrap(),
             ExpressionValue::I64(i) => {
                 let vr = self.new_virt_reg();
                 self.generate_immediate(VirtRegArg::Immediate(*i), vr)
             }
-            ExpressionValue::Operation(_) => self.generate_expression(expr.right.as_ref().unwrap()),
+            ExpressionValue::Operation(_) => {
+                self.generate_expression(expr.right.as_ref().unwrap(), scope)
+            }
         }
     }
 
     fn generate_immediate(&mut self, val: VirtRegArg, virt_reg: VirtReg) -> VirtReg {
-        self.var_locations.insert(virt_reg, val.clone());
-
         match val {
             VirtRegArg::Immediate(i) => {
                 self.code.push(TacValue::Double(Double::new(

@@ -27,9 +27,9 @@ pub enum TType {
 #[derive(Debug, Clone)]
 pub struct Token {
     pub ttype: TType,
-    start_idx: usize,
-    end_idx: usize,
-    line_start_idx: usize,
+    pub start_idx: usize,
+    pub end_idx: usize,
+    pub line_start_idx: usize,
     pub from_line: usize,
 }
 

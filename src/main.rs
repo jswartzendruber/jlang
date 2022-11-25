@@ -33,7 +33,7 @@ fn main() {
     println!("-=------------=-");
     println!();
 
-    let mut parser = Parser::parse(&mut lexer);
+    let parser = Parser::parse(&mut lexer);
     println!("Parser:");
     println!("-=------------=-");
     println!("{}", parser.ast);
@@ -42,7 +42,7 @@ fn main() {
 
     // typecheck here?
 
-    let mut tac = Tac::generate(&mut parser);
+    let tac = Tac::generate(parser);
     println!("TAC:");
     println!("-=------------=-");
     for line in &tac.code {

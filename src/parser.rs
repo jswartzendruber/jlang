@@ -82,11 +82,36 @@ impl Operation {
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct Variable {
     pub name: String,
+    pub from_line: usize,
+    line_start_idx: usize,
+    start_idx: usize,
+    end_idx: usize,
 }
 
 impl Variable {
-    pub fn new(name: String) -> Self {
-        Self { name }
+    pub fn new(
+        name: String,
+        from_line: usize,
+        line_start_idx: usize,
+        start_idx: usize,
+        end_idx: usize,
+    ) -> Self {
+        Self {
+            name,
+            from_line,
+            line_start_idx,
+            start_idx,
+            end_idx,
+        }
+    }
+
+    pub fn copy_line(&self, file_contents: &str) -> String {
+        let bytes = file_contents.as_bytes();
+        let mut i = self.line_start_idx + 1;
+        while i < file_contents.len() && bytes[i] != b'\n' {
+            i += 1;
+        }
+        String::from(&file_contents[self.line_start_idx..i])
     }
 }
 
@@ -199,18 +224,27 @@ impl fmt::Display for FunctionCall {
     }
 }
 
+type Statements = Vec<Statement>;
+
+pub struct Block {
+    pub statements: Statements,
+    pub scope: Scope,
+}
+
+impl Block {
+    fn new(statements: Statements, scope: Scope) -> Self {
+        Self { statements, scope }
+    }
+}
+
 pub struct If {
     pub condition: Expression,
-    pub if_true: Vec<Statement>,
-    pub if_false: Option<Vec<Statement>>,
+    pub if_true: Block,
+    pub if_false: Option<Block>,
 }
 
 impl If {
-    fn new(
-        condition: Expression,
-        if_true: Vec<Statement>,
-        if_false: Option<Vec<Statement>>,
-    ) -> Self {
+    fn new(condition: Expression, if_true: Block, if_false: Option<Block>) -> Self {
         Self {
             condition,
             if_true,
@@ -223,6 +257,7 @@ impl fmt::Display for If {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "If ( {} ) {{", self.condition,).expect("Failed to write");
         self.if_true
+            .statements
             .iter()
             .for_each(|ref stmt| write!(f, "{}", stmt).expect("Failed to write"));
         write!(f, "}} ").expect("Failed to write");
@@ -231,6 +266,7 @@ impl fmt::Display for If {
             self.if_false
                 .as_ref()
                 .unwrap()
+                .statements
                 .iter()
                 .for_each(|ref stmt| write!(f, "{}", stmt).expect("Failed to write"));
         }
@@ -279,12 +315,12 @@ impl fmt::Display for Statement {
 pub struct Function {
     pub name: String,
     args: Vec<Argument>,
-    pub body: Vec<Statement>,
+    pub body: Block,
     return_type: Type,
 }
 
 impl Function {
-    fn new(name: String, args: Vec<Argument>, body: Vec<Statement>, return_type: Type) -> Self {
+    fn new(name: String, args: Vec<Argument>, body: Block, return_type: Type) -> Self {
         Self {
             name,
             args,
@@ -294,15 +330,32 @@ impl Function {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Scope {
     pub table: HashMap<String, Expression>,
+    pub prev: Box<Option<Scope>>,
 }
 
 impl Scope {
-    fn new() -> Self {
+    fn new(prev: Box<Option<Scope>>) -> Self {
         Self {
             table: HashMap::new(),
+            prev,
+        }
+    }
+
+    // Traverse scope from most recent to least, and return var if found.
+    pub fn get_scoped_var(&self, var: &str) -> Option<&Expression> {
+        let elem = self.table.get(var);
+        match elem {
+            Some(e) => Some(e),
+            None => {
+                if self.prev.is_some() {
+                    self.prev.as_ref().as_ref().unwrap().get_scoped_var(var)
+                } else {
+                    None
+                }
+            }
         }
     }
 }
@@ -314,7 +367,7 @@ impl fmt::Display for Function {
             .iter()
             .for_each(|ref arg| write!(f, "{}", arg).expect("Failed to write"));
         write!(f, " ) -> {}\n{{\n", self.return_type)?;
-        for statement in &self.body {
+        for statement in &self.body.statements {
             write!(f, "{}", statement)?;
         }
         write!(f, "}}")
@@ -346,7 +399,7 @@ impl fmt::Display for Ast {
 }
 
 pub struct Parser {
-    file_contents: String,
+    pub file_contents: String,
     pub ast: Ast,
     pub scope: Vec<Scope>, // stack
 }
@@ -358,7 +411,12 @@ impl Parser {
 
             // Immediately overwritten. Used to avoid Option<>
             ast: Ast::new(
-                Node::Function(Function::new("a".to_string(), vec![], vec![], Type::Void)),
+                Node::Function(Function::new(
+                    "a".to_string(),
+                    vec![],
+                    Block::new(vec![], Scope::new(Box::new(None))),
+                    Type::Void,
+                )),
                 Box::new(None),
                 Box::new(None),
             ),
@@ -367,25 +425,14 @@ impl Parser {
     }
 
     fn enter_scope(&mut self) {
-        self.scope.push(Scope::new());
-        println!("enter {:#?}", self.scope);
+        match self.scope.last() {
+            None => self.scope.push(Scope::new(Box::new(None))),
+            Some(s) => self.scope.push(Scope::new(Box::new(Some((*s).clone())))),
+        };
     }
 
-    fn leave_scope(&mut self) {
-        println!("leave {:#?}", self.scope);
-        self.scope.pop();
-    }
-
-    // Traverse scope from most recent to least, and return var if found.
-    fn get_scoped_var(&self, var: &str) -> Option<&Expression> {
-        for scope in self.scope.iter() {
-            let elem = scope.table.get(var);
-            if elem.is_some() {
-                return elem;
-            }
-        }
-
-        None
+    fn leave_scope(&mut self) -> Scope {
+        self.scope.pop().unwrap()
     }
 
     // Insert var in most recent scope. Return false if a var with that name exists.
@@ -396,7 +443,7 @@ impl Parser {
             .unwrap()
             .table
             .insert(var.to_string(), expr);
-	elem.is_none()
+        elem.is_none()
     }
 
     pub fn parse(lexer: &mut Lexer) -> Self {
@@ -432,9 +479,13 @@ impl Parser {
             statements.push(self.parse_statement(tokens));
         }
 
-        self.leave_scope();
         tokens.expect(TType::RCurly, &self.file_contents);
-        Node::Function(Function::new(func_name, vec![], statements, Type::Void))
+        Node::Function(Function::new(
+            func_name,
+            vec![],
+            Block::new(statements, self.leave_scope()),
+            Type::Void,
+        ))
     }
 
     fn parse_statement(&mut self, tokens: &mut Tokens) -> Statement {
@@ -459,10 +510,8 @@ impl Parser {
 
     fn parse_var_declaration(&mut self, tokens: &mut Tokens) -> VarDeclaration {
         tokens.expect(TType::Identifier, &self.file_contents); // let
-        let var_name = tokens
-            .advance()
-            .expect("Expected variable name")
-            .copy_contents(&self.file_contents);
+        let var_name_token = tokens.advance().expect("Expected variable name");
+        let var_name = var_name_token.copy_contents(&self.file_contents);
         tokens.expect(TType::Colon, &self.file_contents);
 
         let var_type = Type::from(
@@ -477,7 +526,6 @@ impl Parser {
         tokens.expect(TType::Semicolon, &self.file_contents);
 
         self.insert_scoped_var(&var_name, var_value.clone());
-
         VarDeclaration::new(var_type, var_value, var_name)
     }
 
@@ -494,23 +542,21 @@ impl Parser {
         self.enter_scope();
 
         // TODO: Handle arbitrary number of statements
-        let if_true = vec![self.parse_statement(tokens)];
+        let if_true_statements = vec![self.parse_statement(tokens)];
+        let if_true = Block::new(if_true_statements, self.leave_scope());
 
-        self.leave_scope();
         tokens.expect(TType::RCurly, &self.file_contents);
 
         curr_token = tokens.current();
         let if_false = if curr_token.copy_contents(&self.file_contents) == "else" {
             tokens.expect(TType::Identifier, &self.file_contents);
-            let mut v = vec![];
-
             tokens.expect(TType::LCurly, &self.file_contents);
             self.enter_scope();
-            v.push(self.parse_statement(tokens));
-            self.leave_scope();
+            let if_false_statements = vec![self.parse_statement(tokens)];
+
             tokens.expect(TType::RCurly, &self.file_contents);
 
-            Some(v)
+            Some(Block::new(if_false_statements, self.leave_scope()))
         } else {
             None
         };
@@ -593,7 +639,13 @@ impl Parser {
             }
             TType::Identifier => {
                 let string_value = lhs_token.copy_contents(&self.file_contents);
-                Expression::new_leaf(ExpressionValue::Variable(Variable::new(string_value)))
+                Expression::new_leaf(ExpressionValue::Variable(Variable::new(
+                    string_value,
+                    lhs_token.from_line,
+                    lhs_token.line_start_idx,
+                    lhs_token.start_idx,
+                    lhs_token.end_idx,
+                )))
             }
             _ => {
                 self.error(lhs_token, "token in expression");
