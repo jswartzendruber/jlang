@@ -75,7 +75,7 @@ impl Token {
 #[derive(Debug)]
 pub struct Tokens {
     pub tokens: Vec<Token>,
-    curr_idx: usize,
+    pub curr_idx: usize,
 }
 
 impl Tokens {
@@ -257,8 +257,8 @@ impl Lexer {
                     lexer.tokens.tokens.push(lexer.add_token(TType::Arrow, 2));
                     lexer.curr_idx += 2;
                 } else {
-                    lexer.tokens.tokens.push(lexer.add_token(TType::Minus, 2));
-                    lexer.curr_idx += 2;
+                    lexer.tokens.tokens.push(lexer.add_token(TType::Minus, 1));
+                    lexer.curr_idx += 1;
                 }
             } else if c.is_ascii_digit() {
                 let start = lexer.curr_idx;

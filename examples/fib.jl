@@ -1,5 +1,6 @@
 main :: () {
-     print_int(fib(10));
+     let a: i64 = fib(12);
+     print_int(a);
 }
 
 fib :: (n : i64) -> i64 {

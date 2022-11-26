@@ -36,7 +36,7 @@ fn main() {
     let parser = Parser::parse(&mut lexer);
     println!("Parser:");
     println!("-=------------=-");
-    println!("{}", parser.ast);
+    println!("{}", parser.ast.as_ref().unwrap());
     println!("-=------------=-");
     println!();
 

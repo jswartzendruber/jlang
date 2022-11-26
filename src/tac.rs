@@ -147,8 +147,12 @@ impl Tac {
     pub fn generate(parser: Parser) -> Self {
         let mut tac = Tac::new(parser.file_contents);
 
-        match &parser.ast.node {
-            Node::Function(f) => tac.generate_function(f),
+        match &parser.ast.unwrap().node {
+            Node::Module(m) => {
+                for func in &m.functions {
+                    tac.generate_function(func);
+                }
+            }
         };
 
         tac
@@ -175,6 +179,9 @@ impl Tac {
 
     fn generate_statement(&mut self, statement: &Statement, scope: &Scope) {
         match statement {
+	    Statement::Return(r) => {
+		todo!();
+	    }
             Statement::VarDeclaration(v) => match v.var_type {
                 Type::I64 => {
                     let virt_reg = self.generate_expression(&v.value, scope);
@@ -259,22 +266,13 @@ impl Tac {
         let virt_reg = self.new_virt_reg();
 
         match &expr.value {
+            ExpressionValue::FunctionCall(fc, sc) => {
+                println!("a");
+                self.generate_statement(&Statement::FunctionCall(fc.clone()), sc);
+            }
             ExpressionValue::Variable(v) => {
-                let var_expr = scope.get_scoped_var(&v.name);
-                match var_expr {
-                    Some(e) => {
-                        self.generate_expression(e, scope);
-                    }
-                    None => {
-                        println!(
-                            "Error: Variable '{}' on line {} is not in scope.",
-                            v.name, v.from_line
-                        );
-                        println!("  {}", v.copy_line(&self.file_contents).trim());
-                        println!();
-                        std::process::exit(1);
-                    }
-                }
+                let virt_reg = self.var_map.get(&v.name).unwrap();
+                println!("virt {}", virt_reg);
             }
             ExpressionValue::I64(i) => {
                 self.generate_immediate(VirtRegArg::Immediate(*i), virt_reg);
@@ -293,6 +291,10 @@ impl Tac {
 
     fn generate_operation(&mut self, expr: &Expression, scope: &Scope) -> VirtReg {
         match &expr.value {
+            ExpressionValue::FunctionCall(fc, sc) => {
+                self.generate_statement(&Statement::FunctionCall(fc.clone()), sc);
+                self.new_virt_reg() // this probably won't work
+            }
             ExpressionValue::Variable(v) => *self.var_map.get(&v.name).unwrap(),
             ExpressionValue::I64(i) => {
                 let vr = self.new_virt_reg();

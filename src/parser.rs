@@ -27,6 +27,7 @@ impl Type {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum Argument {
     Expression(Expression),
     String(String),
@@ -47,6 +48,7 @@ impl fmt::Display for Argument {
 
 #[derive(Debug, Clone)]
 pub enum Operation {
+    Or,
     Add,
     Sub,
     Mul,
@@ -57,6 +59,7 @@ pub enum Operation {
 impl fmt::Display for Operation {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+	    Operation::Or => write!(f, "||"),
             Operation::Add => write!(f, "+"),
             Operation::Sub => write!(f, "-"),
             Operation::Mul => write!(f, "*"),
@@ -69,6 +72,7 @@ impl fmt::Display for Operation {
 impl Operation {
     fn from(ttype: &TType) -> Self {
         match ttype {
+	    TType::PipePipe => Operation::Or,
             TType::Plus => Operation::Add,
             TType::Minus => Operation::Sub,
             TType::Star => Operation::Mul,
@@ -105,14 +109,14 @@ impl Variable {
         }
     }
 
-    pub fn copy_line(&self, file_contents: &str) -> String {
-        let bytes = file_contents.as_bytes();
-        let mut i = self.line_start_idx + 1;
-        while i < file_contents.len() && bytes[i] != b'\n' {
-            i += 1;
-        }
-        String::from(&file_contents[self.line_start_idx..i])
-    }
+    // pub fn copy_line(&self, file_contents: &str) -> String {
+    //     let bytes = file_contents.as_bytes();
+    //     let mut i = self.line_start_idx + 1;
+    //     while i < file_contents.len() && bytes[i] != b'\n' {
+    //         i += 1;
+    //     }
+    //     String::from(&file_contents[self.line_start_idx..i])
+    // }
 }
 
 impl fmt::Display for Variable {
@@ -123,6 +127,7 @@ impl fmt::Display for Variable {
 
 #[derive(Debug, Clone)]
 pub enum ExpressionValue {
+    FunctionCall(FunctionCall, Scope),
     Operation(Operation),
     Variable(Variable),
     I64(i64),
@@ -131,6 +136,9 @@ pub enum ExpressionValue {
 impl fmt::Display for ExpressionValue {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            ExpressionValue::FunctionCall(fc, _) => {
+                write!(f, "{}", fc)
+            }
             ExpressionValue::Operation(o) => {
                 write!(f, "{}", o)
             }
@@ -198,6 +206,7 @@ impl fmt::Display for Expression {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct FunctionCall {
     pub name: String,
     pub args: Vec<Argument>,
@@ -220,7 +229,7 @@ impl fmt::Display for FunctionCall {
         self.args
             .iter()
             .for_each(|ref arg| write!(f, "{}", arg).expect("Failed to write"));
-        writeln!(f, " ) Stack: {}", self.stack_bytes_needed)
+        write!(f, " ) Stack: {}", self.stack_bytes_needed)
     }
 }
 
@@ -298,9 +307,26 @@ impl fmt::Display for VarDeclaration {
     }
 }
 
+pub struct Return {
+    val: Expression,
+}
+
+impl fmt::Display for Return {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "return {}", self.val)
+    }
+}
+
+impl Return {
+    fn new(val: Expression) -> Self {
+	Self { val }
+    }
+}
+
 pub enum Statement {
     VarDeclaration(VarDeclaration),
     FunctionCall(FunctionCall),
+    Return(Return),
     If(If),
 }
 
@@ -309,6 +335,7 @@ impl fmt::Display for Statement {
         match self {
             Statement::VarDeclaration(v) => write!(f, "{}", v),
             Statement::FunctionCall(fc) => write!(f, "{}", fc),
+	    Statement::Return(r) => write!(f, "{}", r),
             Statement::If(i) => write!(f, "{}", i),
         }
     }
@@ -318,15 +345,33 @@ impl Statement {
     fn stack_bytes_needed(&self) -> usize {
         match self {
             Statement::If(_) => unimplemented!(),
+	    Statement::Return(_) => unimplemented!(),
             Statement::FunctionCall(_) => unimplemented!(),
             Statement::VarDeclaration(v) => v.stack_bytes_needed,
         }
     }
 }
 
+pub struct NamedArgument {
+    arg_name: String,
+    arg_type: Type,
+}
+
+impl fmt::Display for NamedArgument {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} : {}", self.arg_name, self.arg_type)
+    }
+}
+
+impl NamedArgument {
+    fn new(arg_name: String, arg_type: Type) -> Self {
+        Self { arg_name, arg_type }
+    }
+}
+
 pub struct Function {
     pub name: String,
-    args: Vec<Argument>,
+    args: Vec<NamedArgument>,
     pub body: Block,
     return_type: Type,
     pub stack_bytes_needed: usize,
@@ -335,7 +380,7 @@ pub struct Function {
 impl Function {
     fn new(
         name: String,
-        args: Vec<Argument>,
+        args: Vec<NamedArgument>,
         body: Block,
         return_type: Type,
         stack_bytes_needed: usize,
@@ -394,8 +439,32 @@ impl fmt::Display for Function {
     }
 }
 
+pub struct Module {
+    name: String,
+    pub functions: Vec<Function>,
+}
+
+impl Module {
+    fn new(name: String) -> Self {
+        Self {
+            name,
+            functions: vec![],
+        }
+    }
+}
+
+impl fmt::Display for Module {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.name)?;
+        for func in &self.functions {
+            write!(f, "{}", func).expect("Failed to write");
+        }
+        writeln!(f)
+    }
+}
+
 pub enum Node {
-    Function(Function),
+    Module(Module),
 }
 
 pub struct Ast {
@@ -413,14 +482,14 @@ impl Ast {
 impl fmt::Display for Ast {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.node {
-            Node::Function(func) => write!(f, "{}", func),
+            Node::Module(m) => write!(f, "{}", m),
         }
     }
 }
 
 pub struct Parser {
     pub file_contents: String,
-    pub ast: Ast,
+    pub ast: Option<Ast>,
     pub scope: Vec<Scope>, // stack
 }
 
@@ -428,19 +497,7 @@ impl Parser {
     fn new(file_contents: String) -> Self {
         Self {
             file_contents,
-
-            // Immediately overwritten. Used to avoid Option<>
-            ast: Ast::new(
-                Node::Function(Function::new(
-                    "a".to_string(),
-                    vec![],
-                    Block::new(vec![], Scope::new(Box::new(None))),
-                    Type::Void,
-                    0,
-                )),
-                Box::new(None),
-                Box::new(None),
-            ),
+            ast: None,
             scope: vec![],
         }
     }
@@ -454,6 +511,10 @@ impl Parser {
 
     fn leave_scope(&mut self) -> Scope {
         self.scope.pop().unwrap()
+    }
+
+    fn current_scope(&self) -> Scope {
+        self.scope.last().unwrap().clone()
     }
 
     // Insert var in most recent scope. Return false if a var with that name exists.
@@ -470,16 +531,22 @@ impl Parser {
     pub fn parse(lexer: &mut Lexer) -> Self {
         let mut parser = Self::new(lexer.file_contents.clone());
 
-        parser.ast = Ast::new(
-            parser.parse_function(&mut lexer.tokens),
+        let mut module = Module::new("main".to_string());
+        while lexer.tokens.curr_idx < lexer.tokens.tokens.len() - 1 {
+            module
+                .functions
+                .push(parser.parse_function(&mut lexer.tokens));
+        }
+        parser.ast = Some(Ast::new(
+            Node::Module(module),
             Box::new(None),
             Box::new(None),
-        );
+        ));
 
         parser
     }
 
-    fn parse_function(&mut self, tokens: &mut Tokens) -> Node {
+    fn parse_function(&mut self, tokens: &mut Tokens) -> Function {
         let func_name = tokens
             .advance()
             .expect("Expected function name")
@@ -488,9 +555,12 @@ impl Parser {
         tokens.expect(TType::ColonColon, &self.file_contents);
         tokens.expect(TType::LParen, &self.file_contents);
 
-        // handle arguments here
+        let arguments = self.parse_function_arguments(tokens);
 
         tokens.expect(TType::RParen, &self.file_contents);
+
+	let return_type = self.parse_function_return_type(tokens);
+
         tokens.expect(TType::LCurly, &self.file_contents);
         self.enter_scope();
 
@@ -506,33 +576,79 @@ impl Parser {
             .sum(); // Stack space needed for local function vars
 
         tokens.expect(TType::RCurly, &self.file_contents);
-        Node::Function(Function::new(
+        Function::new(
             func_name,
-            vec![],
+            arguments,
             Block::new(statements, self.leave_scope()),
             Type::Void,
             stack_bytes_needed,
-        ))
+        )
+    }
+
+    fn parse_function_return_type(&mut self, tokens: &mut Tokens) -> Type {
+	if tokens.current().ttype != TType::LCurly {
+	    tokens.expect(TType::Arrow, &self.file_contents);
+	    Type::from(&tokens.advance().expect("Expected return type").copy_contents(&self.file_contents))
+	} else {
+	    Type::Void
+	}
+    }
+
+    fn parse_function_arguments(&mut self, tokens: &mut Tokens) -> Vec<NamedArgument> {
+        let mut arguments = vec![];
+
+        while tokens.current().ttype != TType::RParen {
+            arguments.push(self.parse_function_argument(tokens));
+        }
+
+        arguments
+    }
+
+    fn parse_function_argument(&mut self, tokens: &mut Tokens) -> NamedArgument {
+        let arg_name = tokens
+            .advance()
+            .expect("Expected argument name")
+            .copy_contents(&self.file_contents);
+        tokens.expect(TType::Colon, &self.file_contents);
+        let arg_type = tokens
+            .advance()
+            .expect("Expected argument type")
+            .copy_contents(&self.file_contents);
+        NamedArgument::new(arg_name, Type::from(&arg_type))
     }
 
     fn parse_statement(&mut self, tokens: &mut Tokens) -> Statement {
         let curr_token = tokens.current();
         let next_token = tokens.peek().expect("Expected statement");
         match next_token.ttype {
-            TType::LParen => Statement::FunctionCall(self.parse_function_call(tokens)),
+            TType::LParen => {
+                let stmt = Statement::FunctionCall(self.parse_function_call(tokens));
+                tokens.expect(TType::Semicolon, &self.file_contents);
+                stmt
+            }
             TType::Identifier => {
                 let curr_contents = curr_token.copy_contents(&self.file_contents);
                 if curr_contents == "if" {
                     Statement::If(self.parse_if_statement(tokens))
                 } else if curr_contents == "let" {
                     Statement::VarDeclaration(self.parse_var_declaration(tokens))
-                } else {
+                } else if curr_contents == "return" {
+		    Statement::Return(self.parse_return_statement(tokens))
+		} else {
+		    println!("unimplemented: {}", curr_contents);
                     unimplemented!();
                 }
             }
             TType::Number => Statement::If(self.parse_if_statement(tokens)),
             _ => unimplemented!(),
         }
+    }
+
+    fn parse_return_statement(&mut self, tokens: &mut Tokens) -> Return {
+	tokens.expect(TType::Identifier, &self.file_contents); // return
+	let expr = self.parse_expression(tokens, 0);
+	tokens.expect(TType::Semicolon, &self.file_contents);
+	Return::new(expr)
     }
 
     fn parse_var_declaration(&mut self, tokens: &mut Tokens) -> VarDeclaration {
@@ -604,7 +720,6 @@ impl Parser {
         let (arguments, stack_bytes_needed) = self.parse_arguments(tokens);
 
         tokens.expect(TType::RParen, &self.file_contents);
-        tokens.expect(TType::Semicolon, &self.file_contents);
 
         FunctionCall::new(func, arguments, stack_bytes_needed)
     }
@@ -653,29 +768,39 @@ impl Parser {
     }
 
     fn parse_expression(&mut self, tokens: &mut Tokens, min_bp: usize) -> Expression {
-        let lhs_token = tokens.advance().expect("Expected expr");
+        let lhs_token = tokens.current().clone();
         let mut lhs = match lhs_token.ttype {
             TType::Number => {
+                tokens.advance();
                 let string_value = lhs_token.copy_contents(&self.file_contents);
                 Expression::new_leaf(ExpressionValue::I64(string_value.parse().unwrap()))
             }
             TType::LParen => {
+                tokens.advance();
                 let lhs = self.parse_expression(tokens, 0);
                 tokens.expect(TType::RParen, &self.file_contents);
                 lhs
             }
             TType::Identifier => {
-                let string_value = lhs_token.copy_contents(&self.file_contents);
-                Expression::new_leaf(ExpressionValue::Variable(Variable::new(
-                    string_value,
-                    lhs_token.from_line,
-                    lhs_token.line_start_idx,
-                    lhs_token.start_idx,
-                    lhs_token.end_idx,
-                )))
+                if tokens.peek().expect("Expected expr").ttype == TType::LParen {
+                    Expression::new_leaf(ExpressionValue::FunctionCall(
+                        self.parse_function_call(tokens),
+                        self.current_scope(),
+                    ))
+                } else {
+                    tokens.advance();
+                    let string_value = lhs_token.copy_contents(&self.file_contents);
+                    Expression::new_leaf(ExpressionValue::Variable(Variable::new(
+                        string_value,
+                        lhs_token.from_line,
+                        lhs_token.line_start_idx,
+                        lhs_token.start_idx,
+                        lhs_token.end_idx,
+                    )))
+                }
             }
             _ => {
-                self.error(lhs_token, "token in expression");
+                self.error(&lhs_token, "token in expression");
                 unreachable!();
             }
         };
@@ -683,7 +808,7 @@ impl Parser {
         loop {
             let op_token = tokens.current();
             let op = match op_token.ttype {
-                TType::Plus | TType::Minus | TType::Star | TType::Slash | TType::EqualEqual => {
+                TType::Plus | TType::Minus | TType::Star | TType::Slash | TType::EqualEqual | TType::PipePipe => {
                     op_token.ttype.clone()
                 }
                 _ => break,
@@ -727,6 +852,7 @@ fn infix_binding_power(op: &TType) -> Option<(usize, usize)> {
         TType::Plus | TType::Minus => (10, 20),
         TType::Star | TType::Slash => (30, 40),
         TType::EqualEqual => (5, 6),
+	TType::PipePipe => (3, 4),
         _ => return None,
     };
     Some(res)
